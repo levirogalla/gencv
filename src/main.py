@@ -4,8 +4,16 @@ import math
 from typing import NamedTuple
 import numpy as np
 import yaml
-from utils.utils import ExperienceYAML, TextEncoder
-from utils.resumeitems import compile_yaml, bullet_point_similarity, project_similarity
+# from gencv.utils import ExperienceYAML, TextEncoder
+# from gencv.resumeitems import compile_yaml, bullet_point_similarity, project_similarity
+from gencv.latex_builder import TexTemplate
+
+TexTemplate(
+    "/Users/levirogalla/Projects/ai-resume-builder/textemplates/jakes_resume")
+
+
+exit()
+
 
 FILE = "src/data.yaml"
 

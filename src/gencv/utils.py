@@ -74,6 +74,11 @@ class ExperienceYAML(BaseModel):
     groups: list[GroupYAML] = None
 
 
+class TemplateYAML(BaseModel):
+    template: str
+    bullet: str
+
+
 def load_yaml(path: str):
     "Load YAML from a file."
     with open(path, 'r') as file:

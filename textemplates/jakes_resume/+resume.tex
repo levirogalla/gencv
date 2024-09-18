@@ -1,0 +1,169 @@
+%-------------------------
+% Resume in Latex
+% Author : Jake Gutierrez
+% Based off of: https://github.com/sb2nov/resume
+% License : MIT
+%------------------------
+
+\documentclass[letterpaper,11pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\input{glyphtounicode}
+\usepackage{tikz}  % For tight spacing
+\usepackage{anyfontsize}  % For using very small fonts
+
+
+%----------FONT OPTIONS----------
+% sans-serif
+% \usepackage[sfdefault]{FiraSans}
+% \usepackage[sfdefault]{roboto}
+% \usepackage[sfdefault]{noto-sans}
+% \usepackage[default]{sourcesanspro}
+
+% serif
+ \usepackage{CormorantGaramond}
+%\usepackage{garamond}
+% \usepackage{charter}
+
+
+\pagestyle{fancy}
+\fancyhf{} % clear all header and footer fields
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Adjust margins
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-.5in}
+\addtolength{\textheight}{1.0in}
+
+\urlstyle{same}
+
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+% Sections formatting
+\titleformat{\section}{
+	\vspace{-4pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+% Ensure that generate pdf is machine readable/ATS parsable
+\pdfgentounicode=1
+
+%-------------------------
+% Custom commands
+\newcommand{\resumeItem}[1]{
+	\item\small{
+		{#1 \vspace{-2pt}}
+	}
+}
+
+\newcommand{\resumeSubheading}[4]{
+	\vspace{-2pt}\item
+	\begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+		\textbf{#1} & #2 \\
+		\textit{\small#3} & \textit{\small #4} \\
+	\end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeSubSubheading}[2]{
+	\item
+	\begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+		\textit{\small#1} & \textit{\small #2} \\
+	\end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeProjectHeading}[2]{
+	\item
+	\begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+		\small#1 & #2 \\
+	\end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
+
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+	\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+	\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+	
+	
+\newcommand{\hiddenkeywords}[1]{
+	\textcolor{white}{\fontsize{1pt}{1pt}\selectfont{YOU ARE NOT SUPPOSED TO BE ABLE TO SEE THIS, IT IS JUST TO HIT KEYWORDS BY ATS SYSTEMS: #1}}}
+
+
+
+%-------------------------------------------
+%%%%%%  RESUME STARTS HERE  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\begin{document}
+	
+	%----------HEADING----------
+	% \begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+		%   \textbf{\href{http://sourabhbajaj.com/}{\Large Sourabh Bajaj}} & Email : \href{mailto:sourabh@sourabhbajaj.com}{sourabh@sourabhbajaj.com}\\
+		%   \href{http://sourabhbajaj.com/}{http://www.sourabhbajaj.com} & Mobile : +1-123-456-7890 \\
+		% \end{tabular*}
+	
+	\begin{center}
+		\textbf{\Huge \scshape Levi Rogalla} \\ \vspace{1pt}
+		\small (647) 300-4005 $|$ \href{mailto:llrogall@uwaterloo.ca}{\underline{llrogall@uwaterloo.ca}} $|$ 
+		\href{https://linkedin.com/in/levirogalla}{\underline{linkedin.com/in/levirogalla}} $|$
+		\href{https://github.com/levirogalla}{\underline{github.com/levirogalla}}
+	\end{center}
+	
+	
+	%-----------EDUCATION-----------
+	\section{Education}
+	\resumeSubHeadingListStart
+	\resumeSubheading
+	{Univeristy of Waterloo}{2022 - 2027}
+	{Bachelor of Applied Science $|$ Mechatronics Engineering}{3.9 GPA}
+	\resumeSubHeadingListEnd
+	
+	
+	%-----------EXPERIENCE-----------
+	\section{Experience}
+	\resumeSubHeadingListStart
+
+	%GENCV {"placetype":"job", "n":2}
+
+	\resumeSubHeadingListEnd
+	%-----------PROJECTS-----------
+	\section{Projects} 
+	\resumeSubHeadingListStart
+
+	%GENCV {"placetype":"project", "n":3}
+
+	\resumeSubHeadingListEnd
+	%-----------PROGRAMMING SKILLS-----------
+	\section{Technical Skills}
+	\begin{itemize}[leftmargin=0.15in, label={}]
+		\small{\item{
+				\textbf{Languages: }{Python, C/C++, SQL, JavaScript/TypeScript, VHDL, HTML/CSS, Cypher QL} \\
+				\textbf{Frameworks: }{FastAPI, Flask, PostgreSQL, HuggingFace, YOLO, Neo4j} \\
+				\textbf{Developer Tools: }{Git, GitHub, Docker, Google Suite, Microsoft Office, Enterprise Architect} \\
+				\textbf{Libraries: }{PyTorch, TensorFlow, OpenCV, Pandas, NumPy, Spacy, Sentence Transformers}
+		}}
+	\end{itemize}
+	
+	% Hidden keywords
+	\hiddenkeywords{CAD, AutoCAD, SolidWorks, MATLAB, Simulink, FEA, ANSYS, CFD, project management, mechanical design, electrical engineering, software development, circuit design, embedded systems, microcontrollers, PLC programming, Lean manufacturing, Six Sigma, robotics, control systems, automation, sensors, data analysis, machine learning, neural networks, artificial intelligence, Python, C++, Java, SQL, Linux, firmware development, Agile, Scrum, Kanban, product development, technical documentation, schematic design, power systems, renewable energy, energy efficiency, IoT, wireless communication, signal processing, PCB design, hydraulics, pneumatics, thermodynamics, fluid dynamics, heat transfer, stress analysis, manufacturing processes, quality assurance, quality control, root cause analysis, failure analysis, structural analysis, 3D modeling, tolerance analysis, materials science, finite element analysis, industrial engineering, logistics, supply chain management, operations management, computational analysis, optimization, testing, validation, verification, prototyping, fabrication, troubleshooting, instrumentation, calibration, commissioning, technical support, systems engineering, requirements analysis, safety standards, compliance, ANSI, ISO, IEC, CE, UL, FCC, EMC, R\&D, product lifecycle management, cost reduction, process improvement, time management, multitasking, collaboration, communication skills, leadership, teamwork, innovation, problem solving, creativity, decision making, attention to detail, adaptability, customer service, vendor management, procurement, contract negotiation, budgeting, cost analysis, risk assessment, resource allocation.}
+	
+	%-------------------------------------------
+\end{document}
