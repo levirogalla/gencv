@@ -3,6 +3,11 @@ import time
 from torch import device
 from transformers import pipeline
 
+print([1, 2] + ["a", "b"])
+
+exit()
+
+
 summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
 
 ARTICLE = """ New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York.

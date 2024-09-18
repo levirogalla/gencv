@@ -1,17 +1,17 @@
 job:
     template: \resumeSubheading
-        {%metatext1}{%metatext2}
-        {%metatext3}{%metatext4}
+        {%metatext1%}{%metatext2%}
+        {%metatext3%}{%metatext4%}
         \resumeItemListStart
-        %bullets
+        %bullets%
         \resumeItemListEnd
 
-    bullet: \resumeItem{%text}
+    bullet: \resumeItem{%text%}
 
 project:
     template: \resumeProjectHeading
-        {\textbf{%metatext1} $|$ \emph{%metatext2}} {\href{%metatext3}{%metatext4}}
+        {\textbf{%metatext1%} $|$ \emph{%metatext2%}} {\href{%metatext3%}{%metatext4%}}
         \resumeItemListStart
-        %bullets
+        %bullets%
         \resumeItemListEnd
     bullet: \resumeItem{%text}

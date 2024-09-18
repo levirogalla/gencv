@@ -6,10 +6,17 @@ import numpy as np
 import yaml
 # from gencv.utils import ExperienceYAML, TextEncoder
 # from gencv.resumeitems import compile_yaml, bullet_point_similarity, project_similarity
-from gencv.latex_builder import TexTemplate
+from gencv.latex_builder import TexResumeTemplate
+from gencv.resumeitems import ResumeExperienceItem, ResumeBulletItem
 
-TexTemplate(
-    "/Users/levirogalla/Projects/ai-resume-builder/textemplates/jakes_resume")
+TexResumeTemplate(
+    "/Users/levirogalla/Projects/ai-resume-builder/textemplates/jakes_resume", experiences=[ResumeExperienceItem(
+        title="the title",
+        experience_type="job",
+        max_bullets=10,
+        min_bullets=3,
+        bullets=[(ResumeBulletItem("test point text, is this working?"), 0)]
+    )]).fill()
 
 
 exit()
