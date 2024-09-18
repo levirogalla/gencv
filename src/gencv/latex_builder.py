@@ -11,12 +11,6 @@ project_points = [
     "The third point"
 ]
 
-metatext1 = "meta1"
-metatext2 = "meta2"
-metatext3 = "meta3"
-
-template = "textemplates/jakes_resume"
-
 
 class ExperiencePlaceHolder(BaseModel):
     placetype: str

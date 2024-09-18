@@ -75,6 +75,10 @@ class ResumeExperienceItem:
         self.max_bullets = max_bullets
         self.min_bullets = min_bullets
 
+    @property
+    def groups(self):
+        return self.__bullet_groups
+
     def add_bullets(self, bullets: list[tuple[ResumeBulletItem, int]], groups: list[GroupData]):
         self.__bullets = bullets
         self.__bullet_groups = groups
@@ -149,23 +153,27 @@ def compile_yaml(data_file: str):
     return compiled_experiences
 
 
-class BulletPointRef(NamedTuple):
+class ProcessedBullet(NamedTuple):
     experience: ResumeExperienceItem
     bullet_point: tuple[ResumeBulletItem, int]
     similarity: float
 
 
-def bullet_point_similarity(compiled_experiences: list[ResumeExperienceItem], prompt) -> list[BulletPointRef]:
+def preprocess_bullets(compiled_experiences: list[ResumeExperienceItem], prompt) -> list[ProcessedBullet]:
     prompt_embedding = TextEncoder.embed(prompt)
     datas = []
     for exp in compiled_experiences:
         for bullet in exp.bullets:
-            datas.append(BulletPointRef(exp, bullet, TextEncoder.cosine_similarity(
-                prompt_embedding, bullet[0].embedding)))
+            datas.append(ProcessedBullet(
+                exp,
+                bullet,
+                TextEncoder.cosine_similarity(
+                    prompt_embedding, bullet[0].embedding),
+            ))
     return datas
 
 
-def project_similarity(bullets: list[BulletPointRef]):
+def experience_similarity(bullets: list[ProcessedBullet]):
     exp_map = {}
     for experience, _, cos_sim in bullets:
         if experience in exp_map:

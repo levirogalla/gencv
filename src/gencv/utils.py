@@ -67,11 +67,12 @@ class ExperienceYAML(BaseModel):
     metatext4: Optional[str] = ""
     metatext5: Optional[str] = ""
 
-    type: Literal["job", "project"]
+    type: str
 
     min_points: Optional[int] = None
     max_points: Optional[int] = None
     groups: list[GroupYAML] = None
+    order: Optional[int] = 0
 
 
 class TemplateYAML(BaseModel):

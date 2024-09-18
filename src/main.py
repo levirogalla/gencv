@@ -5,40 +5,96 @@ from typing import NamedTuple
 import numpy as np
 import yaml
 # from gencv.utils import ExperienceYAML, TextEncoder
-# from gencv.resumeitems import compile_yaml, bullet_point_similarity, project_similarity
+from gencv.resumeitems import GroupData, compile_yaml, preprocess_bullets, experience_similarity
 from gencv.latex_builder import TexResumeTemplate
 from gencv.resumeitems import ResumeExperienceItem, ResumeBulletItem
 
-TexResumeTemplate(
-    "/Users/levirogalla/Projects/ai-resume-builder/textemplates/jakes_resume", experiences=[ResumeExperienceItem(
-        title="the title",
-        experience_type="job",
-        max_bullets=10,
-        min_bullets=3,
-        bullets=[(ResumeBulletItem("test point text, is this working?"), 0)]
-    )]).fill()
-
-
-exit()
-
-
 FILE = "src/data.yaml"
+line_chars_lim = 120
+max_lines = 30
+
+resume_template = TexResumeTemplate(
+    "/Users/levirogalla/Projects/ai-resume-builder/textemplates/jakes_resume")
 
 data = compile_yaml(FILE)
 
-
-bullets = bullet_point_similarity(
+bullets = preprocess_bullets(
     data, """
 autocad experience, microsoft office proficiency, knowledge of chemical process equipment, passion for safety, willingness to improve, strong attendance record, compliance with site policies, ability to work independently, presentation skills.
 """)
-projects = project_similarity(bullets)
-projects = sorted(projects, key=lambda x: x[1], reverse=True)
-for p, sim in projects:
-    print(f"Title: {p.title}, Sim: {sim}")
-print("\n\n")
-bullets = sorted(bullets, key=lambda x: x[2], reverse=True)
+
+experiences = experience_similarity(bullets)
+
+experiences = sorted(experiences, key=lambda x: x[1], reverse=True)
+
+sorted_experiences: list[ResumeExperienceItem] = {}
+
+for exp_arg, _ in resume_template.args:
+    for exp, sim in experiences:
+        if exp.experience_type == exp_arg.placetype and len(sorted_experiences) < exp_arg.n:
+            sorted_experiences.append(exp)
+
+
+selected_experiences: dict[ResumeExperienceItem, dict[GroupData, ResumeBulletItem]] = {
+
+}
+
+
+def calculate_lines(text: str):
+    return math.ceil(text / line_chars_lim)
+
+
+lines = 0
+# satisfy min requirement for groups
 for exp, bullet, sim in bullets:
-    print(f"Title: {bullet[0].text}, Sim: {sim}")
+    group = exp.groups[bullet[1]]
+    if exp not in sorted_experiences:
+        continue
+    if exp not in selected_experiences:
+        selected_experiences[exp] = {}
+    if group not in selected_experiences[exp]:
+        selected_experiences[exp][group] = []
+    if len(selected_experiences[exp][group]) < group.min:
+        lines += calculate_lines(bullet[0].text)
+        selected_experiences[exp][group].append(bullet)
+
+# satisfy min requirement for experiences
+for exp, bullet, sim in bullets:
+    group = exp.groups[bullet[1]]
+    if exp not in sorted_experiences:
+        continue
+    if exp not in selected_experiences:
+        selected_experiences[exp] = {}
+    if group not in selected_experiences[exp]:
+        selected_experiences[exp][group] = []
+    if sum([len(group) for group in selected_experiences[exp]]) < exp.min_bullets:
+        lines += calculate_lines(bullet[0].text)
+        selected_experiences[exp][group].append(bullet)
+
+# get additional points above similarity cut off unless lines has been reached
+for exp, bullet, sim in bullets:
+    group = exp.groups[bullet[1]]
+    if exp not in sorted_experiences:
+        continue
+    if sum([len(group) for group in selected_experiences[exp]]) > exp.max_bullets:
+        continue
+    if len(selected_experiences[exp][group]) > group.max:
+        continue
+    if exp not in selected_experiences:
+        selected_experiences[exp] = {}
+    if group not in selected_experiences[exp]:
+        selected_experiences[exp][group] = []
+    if lines < max_lines:
+        lines += calculate_lines(bullet[0].text)
+        selected_experiences[exp][group].append(bullet)
+
+
+# for p, sim in experiences:
+#     print(f"Title: {p.title}, Sim: {sim}")
+# print("\n\n")
+# bullets = sorted(bullets, key=lambda x: x[2], reverse=True)
+# for exp, bullet, sim in bullets:
+#     print(f"Title: {bullet[0].text}, Sim: {sim}")
 
 
 # print(
@@ -64,3 +120,16 @@ for exp, bullet, sim in bullets:
 #     print("    ", x[0].text)
 
 # print("\n\n")
+
+
+# TexResumeTemplate(
+#     "/Users/levirogalla/Projects/ai-resume-builder/textemplates/jakes_resume", experiences=[ResumeExperienceItem(
+#         title="the title",
+#         experience_type="job",
+#         max_bullets=10,
+#         min_bullets=3,
+#         bullets=[(ResumeBulletItem("test point text, is this working?"), 0)]
+#     )]).fill()
+
+
+def select_point(group,):

@@ -1,31 +1,17 @@
 
+from math import ceil
 import time
 from torch import device
 from transformers import pipeline
 
-print([1, 2] + ["a", "b"])
-
-exit()
-
-
-summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-
-ARTICLE = """ New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York.
-Qualifications:
-1 year of active native Android development
-Kotlin programming expertise
-Understanding and knowledge of Google's material design and industry best practices
-JSON, web-based APIs
-Good communicator who can express thoughts both verbally and written
-Committed to sustainable development, testing and high-quality code
-
-Nice to have:
-Personal development of apps
-A passion for UI & UX
-Experience working in an agile development environment
-
+text = """
+    Maintained continuous communication with manufacturing and mechanical engineers on manufacturing processes and part
 """
-device("mps")
-st = time.time()
-print(summarizer(ARTICLE, max_length=300, min_length=30, do_sample=False))
-print(time.time()-st)
+total = 0
+for char in text:
+    if char == "\n":
+        continue
+    total += 1
+
+print(total)
+print(ceil(120 / total))
