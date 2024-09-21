@@ -1,16 +1,20 @@
 from typing import Literal, NamedTuple
+import math
 from dataclasses import dataclass
 import torch
 import numpy as np
 
-from .utils import TextEncoder, load_yaml
+from gencv.latex_builder import TexResumeTemplate
+
+from .utils import TextEncoder, load_yaml, calculate_lines
 
 
 class ResumeBulletItem:
     def __init__(self, text: str) -> None:
         self.__text = text
         self.__embedding = None
-        self.__dependants = []
+        self.__dependants: list[ResumeBulletItem] = []
+        self.__dependency = None
         self.__parent: ResumeBulletItem = None
         self.set_text(text)
 
@@ -26,6 +30,16 @@ class ResumeBulletItem:
         return self.__parent
 
     @property
+    def dependants(self):
+        return self.__dependants
+
+    def set_dependency(self, dependency: "ResumeBulletItem"):
+        self.__dependency = dependency
+        if self not in dependency.dependants:
+            raise LookupError(
+                "Dependency not added to dependant. Add dependency to dependant first.")
+
+    @property
     def text(self):
         return self.__text
 
@@ -37,7 +51,12 @@ class ResumeBulletItem:
         dependant = ResumeBulletItem(text)
         dependant.set_parent(self)
         self.__dependants.append(dependant)
+        dependant.set_dependency(self)
         return dependant
+
+    @property
+    def dependency(self):
+        return self.__dependency
 
 
 @dataclass(frozen=True)
@@ -48,7 +67,7 @@ class GroupData:
 
 class ResumeExperienceItem:
     def __init__(self,
-                 title: str,
+                 id: str,
                  experience_type: Literal["job", "project"],
                  max_bullets: int,
                  min_bullets: int,
@@ -60,7 +79,7 @@ class ResumeExperienceItem:
                  metatext4="",
                  metatext5="",
                  ) -> None:
-        self.title = title
+        self.id = id
         self.experience_type = experience_type
         self.__bullets = [] if bullets is None else bullets
         self.__bullet_groups = [] if bullet_groups is None else bullet_groups
@@ -101,7 +120,6 @@ class ResumeExperienceItem:
     def add_group(self, bullets: list[ResumeBulletItem], group_data: GroupData):
         index = len(self.__bullet_groups)
         self.__bullet_groups.append(group_data)
-
         for bullet in bullets:
             self.__bullets.append((bullet, index))
 
@@ -116,7 +134,7 @@ def compile_yaml(data_file: str):
 
     for data in experiences:
         resume_experience = ResumeExperienceItem(
-            title=data.title,
+            id=data.id,
             experience_type=data.type,
             metatext1=data.metatext1,
             metatext2=data.metatext2,
@@ -126,7 +144,7 @@ def compile_yaml(data_file: str):
             min_bullets=data.min_points,
             max_bullets=data.max_points
         )
-        # print(data.title)
+
         for bullet_group in data.groups:
             group_data = GroupData(
                 min=bullet_group.min,
@@ -202,3 +220,81 @@ class ResumeFormat1ExperienceItem(ResumeExperienceItem):
                  ) -> None:
         ...
         # super().__init__(...)
+
+
+def select_experiences(experiences: list[ResumeExperienceItem], resume_template: TexResumeTemplate):
+    sorted_experiences_counter: dict[str, list[ResumeExperienceItem]] = {}
+    sorted_experiences: list[ResumeExperienceItem] = []
+    for exp_arg, _ in resume_template.args:
+        sorted_experiences_counter[exp_arg.placetype] = 0
+
+    for exp_arg, _ in resume_template.args:
+        for exp in experiences:
+            if exp.experience_type == exp_arg.placetype and sorted_experiences_counter[exp_arg.placetype] < exp_arg.n:
+                sorted_experiences_counter[exp_arg.placetype] += 1
+                sorted_experiences.append(exp)
+
+    return sorted_experiences
+
+
+def select_experience_bullets(bullets: list[ProcessedBullet], selected_experiences: list[ResumeExperienceItem], max_lines, line_char_lim):
+    def add_bullet(group: list, bullet: ResumeBulletItem, lines_counter: int):
+        if bullet.dependency is not None:
+            add_bullet(group, bullet.dependency, lines_counter)
+        if bullet not in group:
+            group.append(bullet)
+            lines_counter += calculate_lines(bullet.text, line_char_lim)
+
+    selected_experiences: dict[ResumeExperienceItem,
+                               dict[GroupData, list[ResumeBulletItem]]] = {}
+    lines = 0
+    # satisfy min requirement for groups
+    for exp, bullet, _ in bullets:
+        group = exp.groups[bullet[1]]
+        if exp not in selected_experiences:
+            continue
+        if exp not in selected_experiences:
+            selected_experiences[exp] = {}
+        if group not in selected_experiences[exp]:
+            selected_experiences[exp][group] = []
+        if lines > max_lines:
+            break
+        if group.min is None:
+            continue
+        if len(selected_experiences[exp][group]) < group.min:
+            add_bullet(selected_experiences[exp][group], bullet[0], lines)
+
+    # satisfy min requirement for experiences
+    for exp, bullet, _ in bullets:
+        group = exp.groups[bullet[1]]
+        if exp not in selected_experiences:
+            continue
+        if exp not in selected_experiences:
+            selected_experiences[exp] = {}
+        if group not in selected_experiences[exp]:
+            selected_experiences[exp][group] = []
+        if lines > max_lines:
+            break
+        if exp.min_bullets is None:
+            continue
+        if sum(len(group) for _, group in selected_experiences[exp].items()) < exp.min_bullets:
+            add_bullet(selected_experiences[exp][group], bullet[0], lines)
+
+    # get additional points above similarity cut off unless lines has been reached
+    for exp, bullet, _ in bullets:
+        group = exp.groups[bullet[1]]
+        if exp not in selected_experiences:
+            continue
+        if exp.max_bullets is not None:
+            if sum(len(group) for _, group in selected_experiences[exp].items()) > exp.max_bullets:
+                continue
+        if len(selected_experiences[exp][group]) > group.max:
+            continue
+        if exp not in selected_experiences:
+            selected_experiences[exp] = {}
+        if group not in selected_experiences[exp]:
+            selected_experiences[exp][group] = []
+        if lines < max_lines:
+            add_bullet(selected_experiences[exp][group], bullet[0], lines)
+
+    return selected_experiences

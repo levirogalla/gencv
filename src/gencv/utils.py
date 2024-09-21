@@ -1,5 +1,6 @@
 # Use a pipeline as a high-level helper
 # Load model directly
+import math
 from typing import Literal, Optional
 from transformers import AutoTokenizer, AutoModel
 from sentence_transformers import SentenceTransformer
@@ -56,11 +57,10 @@ class ExperienceYAML(BaseModel):
         min: Optional[int] = None
         points: list[PointYAML]
 
-    title: str
-
     # just calling it meta texts so it can be extended to other
     # resume formats, this would be like data, company, keywords, etc.
     # and would depend on the template
+    id: str
     metatext1: Optional[str] = ""
     metatext2: Optional[str] = ""
     metatext3: Optional[str] = ""
@@ -86,6 +86,10 @@ def load_yaml(path: str):
         yaml_data = yaml.safe_load(file)
 
     experiences: list[ExperienceYAML] = []
-    for _, data in yaml_data.items():
-        experiences.append(ExperienceYAML(**data))
+    for exp_id, data in yaml_data.items():
+        experiences.append(ExperienceYAML(**data, id=exp_id))
     return experiences
+
+
+def calculate_lines(text: str, line_chars_lim: int):
+    return math.ceil(len(text) / line_chars_lim)

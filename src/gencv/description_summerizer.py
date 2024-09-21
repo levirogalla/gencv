@@ -35,7 +35,7 @@ def extract_keywords(description: str):
     return keywords
 
 
-print(extract_keywords("""
+print(gen_resume_query("""
 Required Knowledge, Skills and Abilities
 Basic knowledge of AUTOCAD or comparable program
 Familiarity with all Microsoft Office tools
