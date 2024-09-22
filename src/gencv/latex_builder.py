@@ -1,11 +1,14 @@
 from dataclasses import dataclass
 import json
+import subprocess
 import os
+from typing import Literal
 from numpy import fromregex
 import yaml
 from pylatexenc.latexencode import utf8tolatex
 from .utils import TemplateYAML
 from pydantic import BaseModel
+import shutil
 
 
 class ExperiencePlaceHolder(BaseModel):
@@ -115,7 +118,7 @@ class TexResumeTemplate:
         return filled_latex_stack
 
     @staticmethod
-    def to_pdf(self):
+    def to_file(file_path, latex: str | list[str], compiler: Literal["pdflatex"] = "pdflatex", proxy_dir: str = None, output: Literal["pdf", "tex", "all"] = "all"):
         """
         Converts a LaTeX string into a PDF using the terminal LaTeX compiler.
 
@@ -133,22 +136,46 @@ class TexResumeTemplate:
         # Extract the base name (without extension) to use for .tex and .pdf
         base_name = os.path.splitext(output_filename)[0]
 
+        build_dir: str = None
+        proxy_dir_exists = True
         # Ensure the output directory exists
-        if output_directory and not os.path.exists(output_directory):
-            os.makedirs(output_directory)
+        if output == "pdf":
+            build_dir = proxy_dir
+
+            if proxy_dir and not os.path.exists(proxy_dir):
+                proxy_dir_exists = False
+                os.makedirs(proxy_dir)
+            if len(os.listdir(proxy_dir)) != 0:
+                raise FileExistsError(
+                    "Proxy folder is not empty. Files will not be cleaned up.")
+        else:
+            build_dir = output_directory
+            if output_directory and not os.path.exists(output_directory):
+                os.makedirs(output_directory)
 
         # Create the full path for the .tex file
-        tex_file_path = os.path.join(output_directory, base_name + ".tex")
+        tex_file_path = os.path.join(build_dir, base_name + ".tex")
 
         # Write the LaTeX string to a .tex file
+        if output == "tex":
+            with open(tex_file_path, 'w') as tex_file:
+                if isinstance(latex, str):
+                    tex_file.write(latex)
+                else:
+                    tex_file.write("".join(latex))
+            return
+
         with open(tex_file_path, 'w') as tex_file:
-            tex_file.write(latex_string)
+            if isinstance(latex, str):
+                tex_file.write(latex)
+            else:
+                tex_file.write("".join(latex))
 
         # Compile the LaTeX file using the specified LaTeX compiler
         try:
             # Call the LaTeX compiler using subprocess
-            result = subprocess.run([latex_compiler, tex_file_path],
-                                    cwd=output_directory, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result = subprocess.run([compiler, '-interaction=nonstopmode', '-synctex=1', base_name + ".tex"],
+                                    cwd=build_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
             # Check if the compilation was successful
             if result.returncode == 0:
@@ -156,6 +183,12 @@ class TexResumeTemplate:
             else:
                 print(
                     f"Error during PDF generation: {result.stderr.decode('utf-8')}")
+
+            if output == "pdf":
+                shutil.copy(os.path.join(build_dir, base_name + ".pdf"),
+                            os.path.join(output_directory, base_name + ".pdf"))
+                if not proxy_dir_exists:
+                    shutil.rmtree(proxy_dir)
 
         except Exception as e:
             print(f"An error occurred: {e}")

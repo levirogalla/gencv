@@ -192,6 +192,7 @@ def preprocess_bullets(compiled_experiences: list[ResumeExperienceItem], prompt)
 
 
 def experience_similarity(bullets: list[ProcessedBullet]):
+    """Finds how well an experience matches a description using the bullets embedding."""
     exp_map = {}
     for experience, _, cos_sim in bullets:
         if experience in exp_map:
@@ -252,8 +253,6 @@ def select_experience_bullets(bullets: list[ProcessedBullet], selected_experienc
     for exp, bullet, _ in bullets:
         group = exp.groups[bullet[1]]
         if exp not in selected_experiences:
-            continue
-        if exp not in selected_experiences:
             selected_experiences[exp] = {}
         if group not in selected_experiences[exp]:
             selected_experiences[exp][group] = []
@@ -268,8 +267,6 @@ def select_experience_bullets(bullets: list[ProcessedBullet], selected_experienc
     for exp, bullet, _ in bullets:
         group = exp.groups[bullet[1]]
         if exp not in selected_experiences:
-            continue
-        if exp not in selected_experiences:
             selected_experiences[exp] = {}
         if group not in selected_experiences[exp]:
             selected_experiences[exp][group] = []
@@ -283,8 +280,6 @@ def select_experience_bullets(bullets: list[ProcessedBullet], selected_experienc
     # get additional points above similarity cut off unless lines has been reached
     for exp, bullet, _ in bullets:
         group = exp.groups[bullet[1]]
-        if exp not in selected_experiences:
-            continue
         if exp.max_bullets is not None:
             if sum(len(group) for _, group in selected_experiences[exp].items()) > exp.max_bullets:
                 continue

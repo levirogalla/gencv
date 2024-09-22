@@ -1,15 +1,16 @@
 # gencv
-
-import math
-from typing import NamedTuple
-import numpy as np
-from regex import R
-import yaml
-from tqdm import tqdm
-# from gencv.utils import ExperienceYAML, TextEncoder
-from gencv.resumeitems import GroupData, ProcessedBullet, compile_yaml, preprocess_bullets, experience_similarity
+from gencv.resumeitems import ResumeExperienceItem, ResumeBulletItem, select_experience_bullets, select_experiences
 from gencv.latex_builder import TexResumeTemplate, ExperienceData, BulletData
-from gencv.resumeitems import ResumeExperienceItem, ResumeBulletItem, sort_experiences, select_experience_bullets, select_experiences
+from gencv.resumeitems import GroupData, ProcessedBullet, compile_yaml, preprocess_bullets, experience_similarity
+from tqdm import tqdm
+import yaml
+from regex import R
+import numpy as np
+from typing import NamedTuple
+import math
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+# from gencv.utils import ExperienceYAML, TextEncoder
 
 FILE = "src/data.yaml"
 LINE_CHARS_LIM = 120
@@ -28,7 +29,8 @@ AutoCAD software proficiency, Microsoft Office tools experience, chemical proces
 
 experiences = experience_similarity(bullets)
 
-experiences = select_experiences(experiences, resume_template=resume_template)
+experiences = select_experiences(
+    [exp[0] for exp in experiences], resume_template=resume_template)
 
 selected_experience_bullets = select_experience_bullets(
     bullets=bullets,
@@ -68,5 +70,8 @@ compiled_resume_items = sorted(
     compiled_resume_items, key=lambda x: sorted_experiences_order[x.id])
 
 resume = resume_template.fill(compiled_resume_items)
-resume = "".join(resume)
-print(resume)
+print("here")
+TexResumeTemplate.to_file(
+    "Users/levirogalla/Downloads.tex", resume)
+# resume = "".join(resume)
+# print(resume)
