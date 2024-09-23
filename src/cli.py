@@ -18,15 +18,28 @@ app = typer.Typer()
 
 
 class Config(BaseModel):
-    datafile: Optional[str] = "~/.gencv/data.yaml"
-    template_dir: Optional[str] = "~/.gencv/templates"
-    output_dir: Optional[str] = "~/Downloads"
+    datafile: Optional[str] = os.path.expanduser("~/.gencv/data.yaml")
+    template_dir: Optional[str] = os.path.expanduser("~/.gencv/templates")
+    output_dir: Optional[str] = os.path.expanduser("~/Downloads")
     verbose: Optional[bool] = False
     output: Optional[Literal["pdf", "tex", "all"]] = "pdf"
-    proxy_dir: Optional[str] = "~/.gencv/proxy"
+    proxy_dir: Optional[str] = os.path.expanduser("~/.gencv/proxy")
 
 
-config = Config()
+with open(os.path.expanduser("~/.gencvrc"), 'r') as file:
+    config_dict = {}
+    for line in file:
+        # Remove whitespace and newline characters
+        line = line.strip()
+        # Skip empty lines or comment lines (if any)
+        if not line or line.startswith("#"):
+            continue
+        # Split by '=' to separate the key and value
+        key, value = line.split('=', 1)
+        # Store in the dictionary
+        config_dict[key.strip()] = value.strip()
+
+    config = Config(**config_dict)
 
 
 @dataclass(frozen=False)
@@ -45,8 +58,6 @@ def main(
     Global options for the CLI.
     """
     state.verbose = verbose
-    if verbose:
-        typer.echo("Verbose mode is activated")
 
 
 def compile_data():
@@ -85,11 +96,18 @@ def mkres(
     if state.verbose:
         typer.echo("Generating resume data query from description...")
     query = gen_resume_query(desc) if not as_query else desc
+    if state.verbose:
+        typer.echo(f"Generated query: '{query}'")
 
     if state.verbose:
         typer.echo("Querying resume bullet points..")
     bullets = preprocess_bullets(
         data, query)
+    if state.verbose:
+        typer.echo("Queried the following bullets:")
+        for b in sorted(bullets, key=lambda x: x.similarity, reverse=True):
+            typer.echo(
+                f"    Text: {b.bullet_point[0].text} | Similarity: {b.similarity}")
 
     if state.verbose:
         typer.echo("Ranking experiences...")
@@ -146,7 +164,7 @@ def mkres(
     if state.verbose:
         typer.echo("Generating PDF...")
     TexResumeTemplate.to_file(
-        outdir, resume, proxy_dir=config.proxy_dir, output=output)
+        outdir, template, resume, proxy_dir=config.proxy_dir, output=output)
 
 
 # @app.command()

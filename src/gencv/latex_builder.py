@@ -118,7 +118,7 @@ class TexResumeTemplate:
         return filled_latex_stack
 
     @staticmethod
-    def to_file(file_path, latex: str | list[str], compiler: Literal["pdflatex"] = "pdflatex", proxy_dir: str = None, output: Literal["pdf", "tex", "all"] = "all"):
+    def to_file(output_dir, filename, latex: str | list[str], compiler: Literal["pdflatex"] = "pdflatex", proxy_dir: str = None, output: Literal["pdf", "tex", "all"] = "all"):
         """
         Converts a LaTeX string into a PDF using the terminal LaTeX compiler.
 
@@ -130,12 +130,8 @@ class TexResumeTemplate:
         Returns:
             None: The PDF is generated at the specified file path.
         """
-        # Split the file path into directory and filename
-        output_directory, output_filename = os.path.split(file_path)
 
         # Extract the base name (without extension) to use for .tex and .pdf
-        base_name = os.path.splitext(output_filename)[0]
-
         build_dir: str = None
         proxy_dir_exists = True
         # Ensure the output directory exists
@@ -149,12 +145,12 @@ class TexResumeTemplate:
                 raise FileExistsError(
                     "Proxy folder is not empty. Files will not be cleaned up.")
         else:
-            build_dir = output_directory
-            if output_directory and not os.path.exists(output_directory):
-                os.makedirs(output_directory)
+            build_dir = output_dir
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir)
 
         # Create the full path for the .tex file
-        tex_file_path = os.path.join(build_dir, base_name + ".tex")
+        tex_file_path = os.path.join(build_dir, filename + ".tex")
 
         # Write the LaTeX string to a .tex file
         if output == "tex":
@@ -174,19 +170,19 @@ class TexResumeTemplate:
         # Compile the LaTeX file using the specified LaTeX compiler
         try:
             # Call the LaTeX compiler using subprocess
-            result = subprocess.run([compiler, '-interaction=nonstopmode', '-synctex=1', base_name + ".tex"],
+            result = subprocess.run([compiler, '-interaction=nonstopmode', '-synctex=1', filename + ".tex"],
                                     cwd=build_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
             # Check if the compilation was successful
             if result.returncode == 0:
-                print(f"PDF successfully generated at {file_path}")
+                print(f"PDF successfully generated at {output_dir}")
             else:
                 print(
                     f"Error during PDF generation: {result.stderr.decode('utf-8')}")
 
             if output == "pdf":
-                shutil.copy(os.path.join(build_dir, base_name + ".pdf"),
-                            os.path.join(output_directory, base_name + ".pdf"))
+                shutil.copy(os.path.join(build_dir, filename + ".pdf"),
+                            os.path.join(output_dir, filename + ".pdf"))
                 if not proxy_dir_exists:
                     shutil.rmtree(proxy_dir)
 

@@ -35,19 +35,19 @@ def extract_keywords(description: str):
     return keywords
 
 
-print(gen_resume_query("""
-Required Knowledge, Skills and Abilities
-Basic knowledge of AUTOCAD or comparable program
-Familiarity with all Microsoft Office tools
-Basic understanding of chemical process equipment (pumps, valves, motors, & controls)
-Passion for safety
-Drive to improve
-Willingness to learn
-Expectations
-Prompt and regular attendance
-Comply with all site policy & training requirements
-Satisfactorily perform duties as assigned
-Participation in site Intern events & activities
-Final presentation of Intern activities & learnings
-All positions are subject to background checks, including police checks and medical
-"""))
+# print(gen_resume_query("""
+# Required Knowledge, Skills and Abilities
+# Basic knowledge of AUTOCAD or comparable program
+# Familiarity with all Microsoft Office tools
+# Basic understanding of chemical process equipment (pumps, valves, motors, & controls)
+# Passion for safety
+# Drive to improve
+# Willingness to learn
+# Expectations
+# Prompt and regular attendance
+# Comply with all site policy & training requirements
+# Satisfactorily perform duties as assigned
+# Participation in site Intern events & activities
+# Final presentation of Intern activities & learnings
+# All positions are subject to background checks, including police checks and medical
+# """))
