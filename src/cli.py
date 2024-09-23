@@ -1,17 +1,14 @@
 from dataclasses import dataclass
 from pydantic import BaseModel
 import typer
-from gencv.resumeitems import ResumeExperienceItem, ResumeBulletItem, select_experience_bullets, select_experiences
+from gencv.resumeitems import select_experience_bullets, select_experiences
 from gencv.latex_builder import TexResumeTemplate, ExperienceData, BulletData
-from gencv.resumeitems import GroupData, ProcessedBullet, compile_yaml, preprocess_bullets, experience_similarity
+from gencv.resumeitems import compile_yaml, preprocess_bullets, experience_similarity
 from gencv.description_summerizer import gen_resume_query, extract_keywords
-from tqdm import tqdm
-import yaml
-from regex import R
-import numpy as np
 from typing import Literal, NamedTuple, Optional
-import math
 import os
+
+
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 app = typer.Typer()
@@ -74,6 +71,7 @@ def select_projects():
 def mkres(
         template: str,
         desc: str,
+        outname: str = None,
         outdir: str = config.output_dir,
         output: str = "pdf",
         as_query: bool = False,
@@ -164,7 +162,7 @@ def mkres(
     if state.verbose:
         typer.echo("Generating PDF...")
     TexResumeTemplate.to_file(
-        outdir, template, resume, proxy_dir=config.proxy_dir, output=output)
+        outdir, template, resume, output_name=outname, proxy_dir=config.proxy_dir, output=output)
 
 
 # @app.command()

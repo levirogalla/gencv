@@ -9,6 +9,7 @@ from pylatexenc.latexencode import utf8tolatex
 from .utils import TemplateYAML
 from pydantic import BaseModel
 import shutil
+import datetime
 
 
 class ExperiencePlaceHolder(BaseModel):
@@ -118,7 +119,7 @@ class TexResumeTemplate:
         return filled_latex_stack
 
     @staticmethod
-    def to_file(output_dir, filename, latex: str | list[str], compiler: Literal["pdflatex"] = "pdflatex", proxy_dir: str = None, output: Literal["pdf", "tex", "all"] = "all"):
+    def to_file(output_dir, filename, latex: str | list[str],  output_name=None, compiler: Literal["pdflatex"] = "pdflatex", proxy_dir: str = None, output: Literal["pdf", "tex", "all"] = "all"):
         """
         Converts a LaTeX string into a PDF using the terminal LaTeX compiler.
 
@@ -134,6 +135,8 @@ class TexResumeTemplate:
         # Extract the base name (without extension) to use for .tex and .pdf
         build_dir: str = None
         proxy_dir_exists = True
+        if output_name is None:
+            output_name = f"{filename}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
         # Ensure the output directory exists
         if output == "pdf":
             build_dir = proxy_dir
@@ -175,14 +178,14 @@ class TexResumeTemplate:
 
             # Check if the compilation was successful
             if result.returncode == 0:
-                print(f"PDF successfully generated at {output_dir}")
+                print(f"PDF successfully generated at {output_dir}.")
             else:
                 print(
                     f"Error during PDF generation: {result.stderr.decode('utf-8')}")
 
             if output == "pdf":
                 shutil.copy(os.path.join(build_dir, filename + ".pdf"),
-                            os.path.join(output_dir, filename + ".pdf"))
+                            os.path.join(output_dir, f"{output_name}.pdf"))
                 if not proxy_dir_exists:
                     shutil.rmtree(proxy_dir)
 
