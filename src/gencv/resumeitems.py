@@ -1,6 +1,6 @@
 from typing import Literal, NamedTuple
-import math
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 import torch
 import numpy as np
 
@@ -17,6 +17,12 @@ class ResumeBulletItem:
         self.__dependency = None
         self.__parent: ResumeBulletItem = None
         self.set_text(text)
+
+    def __str__(self) -> str:
+        return self.__text
+
+    def __repr__(self) -> str:
+        return self.__text
 
     def set_text(self, text: str) -> "ResumeItem":
         self.__text = text
@@ -63,6 +69,11 @@ class ResumeBulletItem:
 class GroupData:
     min: int
     max: int
+    _id: uuid.UUID = field(init=False, repr=False)
+
+    def __post_init__(self):
+        # Set the unique ID after the instance is created
+        object.__setattr__(self, '_id', uuid.uuid4())
 
 
 class ResumeExperienceItem:
@@ -93,6 +104,9 @@ class ResumeExperienceItem:
 
         self.max_bullets = max_bullets
         self.min_bullets = min_bullets
+
+    def __str__(self) -> str:
+        return self.metatext1
 
     @property
     def groups(self):
@@ -274,22 +288,29 @@ def select_experience_bullets(bullets: list[ProcessedBullet], selected_experienc
             break
         if exp.min_bullets is None:
             continue
-        if sum(len(group) for _, group in selected_experiences[exp].items()) < exp.min_bullets:
+        if sum(
+                len(group) for _, group in selected_experiences[exp].items()) < exp.min_bullets and len(selected_experiences[exp][group]) < group.max:
             add_bullet(selected_experiences[exp][group], bullet[0], lines)
 
     # get additional points above similarity cut off unless lines has been reached
     for exp, bullet, _ in bullets:
         group = exp.groups[bullet[1]]
-        if exp.max_bullets is not None:
-            if sum(len(group) for _, group in selected_experiences[exp].items()) > exp.max_bullets:
-                continue
-        if len(selected_experiences[exp][group]) > group.max:
-            continue
         if exp not in selected_experiences:
             selected_experiences[exp] = {}
         if group not in selected_experiences[exp]:
             selected_experiences[exp][group] = []
+        if exp.max_bullets is not None:
+            if sum(len(group) for _, group in selected_experiences[exp].items()) >= exp.max_bullets:
+                continue
+        if len(selected_experiences[exp][group]) >= group.max:
+            if bullet[0].text == "Developed various JavaScript and Python scripts for co-workers to improve the time spent on requirements management in Excel by over 500%.":
+                print("22222")
+                print(selected_experiences[exp][group],
+                      group.max, selected_experiences[exp])
+            continue
         if lines < max_lines:
+            if bullet[0].text == "Developed various JavaScript and Python scripts for co-workers to improve the time spent on requirements management in Excel by over 500%.":
+                print("111111")
             add_bullet(selected_experiences[exp][group], bullet[0], lines)
 
     return selected_experiences

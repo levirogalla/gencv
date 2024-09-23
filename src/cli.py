@@ -82,23 +82,32 @@ def mkres(
     # this stuff should be defined on the template
     LINE_CHARS_LIM = 120
     MAX_LINES = 30
-
+    if not state.verbose:
+        progressbar = typer.progressbar(length=11)
     if state.verbose:
         typer.echo("Reading template...")
+    else:
+        progressbar.update(1)
     resume_template = TexResumeTemplate(os.path.join(template_dir, template))
 
     if state.verbose:
         typer.echo("Compiling resume data...")
+    else:
+        progressbar.update(1)
     data = compile_yaml(datafile)
 
     if state.verbose:
         typer.echo("Generating resume data query from description...")
+    else:
+        progressbar.update(1)
     query = gen_resume_query(desc) if not as_query else desc
     if state.verbose:
         typer.echo(f"Generated query: '{query}'")
 
     if state.verbose:
         typer.echo("Querying resume bullet points..")
+    else:
+        progressbar.update(1)
     bullets = preprocess_bullets(
         data, query)
     if state.verbose:
@@ -109,15 +118,21 @@ def mkres(
 
     if state.verbose:
         typer.echo("Ranking experiences...")
+    else:
+        progressbar.update(1)
     experiences = experience_similarity(bullets)
 
     if state.verbose:
         typer.echo("Selecting best experiences...")
+    else:
+        progressbar.update(1)
     experiences = select_experiences(
         [exp[0] for exp in experiences], resume_template=resume_template)
 
     if state.verbose:
         typer.echo("Selecting best bullet points for experiences...")
+    else:
+        progressbar.update(1)
     selected_experience_bullets = select_experience_bullets(
         bullets=bullets,
         selected_experiences=experiences,
@@ -125,30 +140,35 @@ def mkres(
         line_char_lim=LINE_CHARS_LIM,
     )
 
+    if state.verbose:
+        typer.echo("Preparing to instert resume data...")
+    else:
+        progressbar.update(1)
     compiled_resume_items = []
-    with typer.progressbar(selected_experience_bullets.items(), label="Preparing resume data") as experiences_iterator:
-        for item, group in experiences_iterator:
-            bullet_datas = []
-            for _, bullets in group.items():
-                for bullet in bullets:
-                    bullet_datas.append(BulletData(text=bullet.text))
-            # filler group data since it isnt need for the latex builder
+    for item, group in selected_experience_bullets.items():
+        bullet_datas = []
+        for _, bullets in group.items():
+            for bullet in bullets:
+                bullet_datas.append(BulletData(text=bullet.text))
+        # filler group data since it isnt need for the latex builder
 
-            resume_item = ExperienceData(
-                id=item.id,
-                experience_type=item.experience_type,
-                metatext1=item.metatext1,
-                metatext2=item.metatext2,
-                metatext3=item.metatext3,
-                metatext4=item.metatext4,
-                metatext5=item.metatext5,
-                bullets=bullet_datas
-            )
+        resume_item = ExperienceData(
+            id=item.id,
+            experience_type=item.experience_type,
+            metatext1=item.metatext1,
+            metatext2=item.metatext2,
+            metatext3=item.metatext3,
+            metatext4=item.metatext4,
+            metatext5=item.metatext5,
+            bullets=bullet_datas
+        )
 
-            compiled_resume_items.append(resume_item)
+        compiled_resume_items.append(resume_item)
 
     if state.verbose:
         typer.echo("Organzing resume experiences and bullets...")
+    else:
+        progressbar.update(1)
     sorted_experiences_order: dict[str, int] = {}
     for i, (exp) in enumerate(experiences):
         sorted_experiences_order[exp.id] = i
@@ -157,10 +177,14 @@ def mkres(
 
     if state.verbose:
         typer.echo("Filling resume template...")
+    else:
+        progressbar.update(1)
     resume = resume_template.fill(compiled_resume_items)
 
     if state.verbose:
         typer.echo("Generating PDF...")
+    else:
+        progressbar.update(1)
     TexResumeTemplate.to_file(
         outdir, template, resume, output_name=outname, proxy_dir=config.proxy_dir, output=output)
 
