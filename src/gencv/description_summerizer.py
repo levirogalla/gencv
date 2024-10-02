@@ -2,11 +2,13 @@ import ollama
 
 
 def gen_resume_query(description: str):
+    """Create a textual query from description."""
     prompt = """
     Your job is to summerize the qualification listed in a job description into a text search query.
     An example of a query that you would respond with is: 'Embedded systems engineering, 
     mechanical engineering, knowledge of gradient desent, and comfortable with vs code'.
-    Respond with ONLY the query and make sure to include ALL technical and soft requirements, the job description you are summerizing is written below: \n\n
+    Respond with ONLY the query, make sure to include ALL technical and soft requirements, do NOT make up any information you do not have. 
+    The job description you are summerizing is written below: \n\n
     """
     stream = ollama.chat(
         model='llama3.1:8b',
@@ -18,6 +20,7 @@ def gen_resume_query(description: str):
 
 
 def extract_keywords(description: str):
+    """Extracts keywords from the description."""
     prompt = """
     Your job is to summerize the requirements listed in a job description into CSV.
     An example of a query that you would respond with is: 'Python, C++, AutoCAD, SolidWorks, Communication'.

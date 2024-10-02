@@ -1,7 +1,7 @@
 # gencv
 from gencv.resumeitems import ResumeExperienceItem, ResumeBulletItem, select_experience_bullets, select_experiences
 from gencv.latex_builder import TexResumeTemplate, ExperienceData, BulletData
-from gencv.resumeitems import GroupData, ProcessedBullet, compile_yaml, preprocess_bullets, experience_similarity
+from gencv.resumeitems import GroupData, PreProcessedBullet, compile_yaml, preprocess_bullets, experience_similarity
 from tqdm import tqdm
 import yaml
 from regex import R
@@ -34,7 +34,7 @@ experiences = select_experiences(
 
 selected_experience_bullets = select_experience_bullets(
     bullets=bullets,
-    selected_experiences=experiences,
+    selected_experiences_bullets=experiences,
     max_lines=MAX_LINES,
     line_char_lim=LINE_CHARS_LIM,
 )

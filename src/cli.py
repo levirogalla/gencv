@@ -1,12 +1,15 @@
+"""CLI for generating custom resumes tailored to job description."""
+
+import os
+from typing import Literal, Optional
 from dataclasses import dataclass
 from pydantic import BaseModel
 import typer
-from gencv.resumeitems import select_experience_bullets, select_experiences
+from gencv.resumeitems import (
+    ResumeBulletItem, ResumeExperienceItem,
+    select_data, compile_yaml, preprocess_bullets, process_data)
 from gencv.latex_builder import TexResumeTemplate, ExperienceData, BulletData
-from gencv.resumeitems import compile_yaml, preprocess_bullets, experience_similarity
-from gencv.description_summerizer import gen_resume_query, extract_keywords
-from typing import Literal, NamedTuple, Optional
-import os
+from gencv.description_summerizer import gen_resume_query
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -15,6 +18,7 @@ app = typer.Typer()
 
 
 class Config(BaseModel):
+    """Holds the config options for the program."""
     datafile: Optional[str] = os.path.expanduser("~/.gencv/data.yaml")
     template_dir: Optional[str] = os.path.expanduser("~/.gencv/templates")
     output_dir: Optional[str] = os.path.expanduser("~/Downloads")
@@ -23,7 +27,7 @@ class Config(BaseModel):
     proxy_dir: Optional[str] = os.path.expanduser("~/.gencv/proxy")
 
 
-with open(os.path.expanduser("~/.gencvrc"), 'r') as file:
+with open(os.path.expanduser("~/.gencvrc"), 'r', encoding='utf-8') as file:
     config_dict = {}
     for line in file:
         # Remove whitespace and newline characters
@@ -41,6 +45,7 @@ with open(os.path.expanduser("~/.gencvrc"), 'r') as file:
 
 @dataclass(frozen=False)
 class State:
+    """Holds program state."""
     verbose: bool = config.verbose
 
 
@@ -67,6 +72,14 @@ def select_projects():
     ...
 
 
+def update_console_progress(message: str, progressbar):
+    """Outputs the message to the consol if in verbose mode otherwise just updates progress bar."""
+    if state.verbose:
+        typer.echo(message)
+    else:
+        progressbar.update(1)
+
+
 @app.command()
 def mkres(
         template: str,
@@ -81,121 +94,72 @@ def mkres(
 
     # this stuff should be defined on the template
     LINE_CHARS_LIM = 120
-    MAX_LINES = 30
+    MAX_LINES = 31
     if not state.verbose:
-        progressbar = typer.progressbar(length=11)
-    if state.verbose:
-        typer.echo("Reading template...")
+        progressbar = typer.progressbar(length=7)
     else:
-        progressbar.update(1)
+        progressbar = None
+
+    # load template into program
     resume_template = TexResumeTemplate(os.path.join(template_dir, template))
 
-    if state.verbose:
-        typer.echo("Compiling resume data...")
-    else:
-        progressbar.update(1)
+    update_console_progress("Compiling resume data...", progressbar)
+    # load yaml file into program as python objects
     data = compile_yaml(datafile)
 
-    if state.verbose:
-        typer.echo("Generating resume data query from description...")
-    else:
-        progressbar.update(1)
+    update_console_progress(
+        "Generating resume data query from description...", progressbar)
+    # generate resume query
     query = gen_resume_query(desc) if not as_query else desc
     if state.verbose:
         typer.echo(f"Generated query: '{query}'")
 
-    if state.verbose:
-        typer.echo("Querying resume bullet points..")
-    else:
-        progressbar.update(1)
-    bullets = preprocess_bullets(
-        data, query)
-    if state.verbose:
-        typer.echo("Queried the following bullets:")
-        for b in sorted(bullets, key=lambda x: x.similarity, reverse=True):
-            typer.echo(
-                f"    Text: {b.bullet_point[0].text} | Similarity: {b.similarity}")
+    update_console_progress("Querying resume bullet points..", progressbar)
+    bullets = preprocess_bullets(data, query)
 
-    if state.verbose:
-        typer.echo("Ranking experiences...")
-    else:
-        progressbar.update(1)
-    experiences = experience_similarity(bullets)
+    update_console_progress("Ranking experiences...", progressbar)
+    processed_data = process_data(bullets)
 
-    if state.verbose:
-        typer.echo("Selecting best experiences...")
-    else:
-        progressbar.update(1)
-    experiences = select_experiences(
-        [exp[0] for exp in experiences], resume_template=resume_template)
+    update_console_progress(
+        "Selecting best bullet points for experiences...", progressbar)
+    selected_data = select_data(
+        processed_data, resume_template, MAX_LINES, LINE_CHARS_LIM)
 
-    if state.verbose:
-        typer.echo("Selecting best bullet points for experiences...")
-    else:
-        progressbar.update(1)
-    selected_experience_bullets = select_experience_bullets(
-        bullets=bullets,
-        selected_experiences=experiences,
-        max_lines=MAX_LINES,
-        line_char_lim=LINE_CHARS_LIM,
-    )
+    # sort selected data based on order and similarity
+    selected_data = sorted(selected_data, key=lambda x: x.sorting_data)
 
-    if state.verbose:
-        typer.echo("Preparing to instert resume data...")
-    else:
-        progressbar.update(1)
-    compiled_resume_items = []
-    for item, group in selected_experience_bullets.items():
-        bullet_datas = []
-        for _, bullets in group.items():
-            for bullet in bullets:
-                bullet_datas.append(BulletData(text=bullet.text))
-        # filler group data since it isnt need for the latex builder
+    exp_id_data_map: dict[str, tuple[ResumeExperienceItem,
+                                     list[ResumeBulletItem]]] = {}
+    for d in selected_data:
+        if d.experience.id not in exp_id_data_map:
+            exp_id_data_map[d.experience.id] = (d.experience, [])
+        exp_id_data_map[d.experience.id][1].append(d.bullet)
 
-        resume_item = ExperienceData(
-            id=item.id,
-            experience_type=item.experience_type,
-            metatext1=item.metatext1,
-            metatext2=item.metatext2,
-            metatext3=item.metatext3,
-            metatext4=item.metatext4,
-            metatext5=item.metatext5,
-            bullets=bullet_datas
+    template_data: list[ExperienceData] = []
+    for _, (experience, bullets) in exp_id_data_map.items():
+        template_bullets = []
+        for b in bullets:
+            template_bullets.append(BulletData(b.text, b.bold))
+        template_experience = ExperienceData(
+            id=experience.id,
+            experience_type=experience.experience_type,
+            bullets=template_bullets,
+            metatext1=experience.metatext1,
+            metatext2=experience.metatext2,
+            metatext3=experience.metatext3,
+            metatext4=experience.metatext4,
+            metatext5=experience.metatext5
         )
+        template_data.append(template_experience)
 
-        compiled_resume_items.append(resume_item)
+    # need to make this data interface into the resume template
 
-    if state.verbose:
-        typer.echo("Organzing resume experiences and bullets...")
-    else:
-        progressbar.update(1)
-    sorted_experiences_order: dict[str, int] = {}
-    for i, (exp) in enumerate(experiences):
-        sorted_experiences_order[exp.id] = i
-    compiled_resume_items = sorted(
-        compiled_resume_items, key=lambda x: sorted_experiences_order[x.id])
+    update_console_progress("Filling resume template...", progressbar)
+    resume = resume_template.fill(template_data)
 
-    if state.verbose:
-        typer.echo("Filling resume template...")
-    else:
-        progressbar.update(1)
-    resume = resume_template.fill(compiled_resume_items)
-
-    if state.verbose:
-        typer.echo("Generating PDF...")
-    else:
-        progressbar.update(1)
+    update_console_progress("Generating PDF...", progressbar)
     TexResumeTemplate.to_file(
         outdir, template, resume, output_name=outname, proxy_dir=config.proxy_dir, output=output)
-
-
-# @app.command()
-# def main(name: str, age: int = None, teen: bool = True):
-#     """A simple command-line script."""
-#     print(f"Hello, {name}!")
-#     if age:
-#         print(f"You are {age} years old.")
-#     print(teen)
 
 
 if __name__ == "__main__":
