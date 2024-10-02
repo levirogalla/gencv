@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import Flag
 import json
 import subprocess
 import os
@@ -28,8 +29,12 @@ def fill_item_template(template: TemplateYAML, data: "ExperienceData") -> str:
 
     compiled_bullets: list[str] = []
     for bullet in data.bullets:
+        text = utf8tolatex(bullet.text)
+        for bold_kw in bullet.bold:
+            text = text.replace(utf8tolatex(
+                bold_kw), rf"\textbf{{{bold_kw}}}")
         compiled_bullet = template.bullet.replace(
-            bullet_text_kw, utf8tolatex(bullet.text))
+            bullet_text_kw, text)
         compiled_bullets.append(compiled_bullet)
 
     compiled_template = template.template \
@@ -52,6 +57,7 @@ class TexResumeTemplate:
             self.item_templates: dict[str, dict] = yaml.safe_load(f)
 
         self.command_stack = self.create_command_stack()
+        # tuple is start index and end index of where the place holder is in the string
         self.args: list[tuple[ExperiencePlaceHolder, tuple[int, int]]] = []
         self.compile()
 
@@ -171,31 +177,35 @@ class TexResumeTemplate:
                 tex_file.write("".join(latex))
 
         # Compile the LaTeX file using the specified LaTeX compiler
-        try:
-            # Call the LaTeX compiler using subprocess
-            result = subprocess.run([compiler, '-interaction=nonstopmode', '-synctex=1', filename + ".tex"],
-                                    cwd=build_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-            # Check if the compilation was successful
-            if result.returncode == 0:
-                print(f"PDF successfully generated at {output_dir}.")
-            else:
-                print(
-                    f"Error during PDF generation: {result.stderr.decode('utf-8')}")
+        # Call the LaTeX compiler using subprocess
+        result = subprocess.run([compiler, '-interaction=nonstopmode', '-synctex=1', filename + ".tex"],
+                                cwd=build_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-            if output == "pdf":
-                shutil.copy(os.path.join(build_dir, filename + ".pdf"),
-                            os.path.join(output_dir, f"{output_name}.pdf"))
-                if not proxy_dir_exists:
-                    shutil.rmtree(proxy_dir)
+        # Check if the compilation was successful
+        if result.returncode == 0:
+            print(f"PDF successfully generated at {output_dir}.")
+        else:
+            print(
+                f"Error during PDF generation: {result.stderr.decode('utf-8')}")
 
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        if output == "pdf":
+            shutil.copy(os.path.join(build_dir, filename + ".pdf"),
+                        os.path.join(output_dir, f"{output_name}.pdf"))
+            if not proxy_dir_exists:
+                shutil.rmtree(proxy_dir)
+
+    def get_experience_args(self, experience_type: str) -> ExperiencePlaceHolder:
+        for exp, _ in self.args:
+            if exp.placetype == experience_type:
+                return exp
+        raise ValueError(f"{experience_type} not found in template.")
 
 
 @dataclass(frozen=True)
 class BulletData:
     text: str
+    bold: list[str] = None
 
 
 @dataclass(frozen=True)

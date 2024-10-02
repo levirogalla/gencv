@@ -1,0 +1,11 @@
+issue with selecting points, maybe re do entire algorithm
+
+[experience_order, experience_similarity, experience_id, ]
+
+first sort the experiences by they're fixed order if given,
+then sort by their similarity,
+in the case where to experiences have the same similarity add an extra sort by experience_id, which won't do anything if theyre already grouped together
+then sort the bullets by their fixed order,
+then by the bullets similarity if know order is given,
+then by group,
+then by order in group

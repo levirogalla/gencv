@@ -10,12 +10,17 @@ from .utils import TextEncoder, load_yaml, calculate_lines
 
 
 class ResumeBulletItem:
-    def __init__(self, text: str) -> None:
+    DEFAULT_ORDER = 99999
+
+    def __init__(self, text: str, order_: int, order: int = DEFAULT_ORDER, bold: list[str] = None) -> None:
         self.__text = text
         self.__embedding = None
         self.__dependants: list[ResumeBulletItem] = []
         self.__dependency = None
         self.__parent: ResumeBulletItem = None
+        self.order_ = order_
+        self.order = order
+        self.bold = bold
         self.set_text(text)
 
     def __str__(self) -> str:
@@ -53,8 +58,7 @@ class ResumeBulletItem:
     def embedding(self):
         return self.__embedding
 
-    def add_dependant(self, text):
-        dependant = ResumeBulletItem(text)
+    def add_dependant(self, dependant):
         dependant.set_parent(self)
         self.__dependants.append(dependant)
         dependant.set_dependency(self)
@@ -69,7 +73,8 @@ class ResumeBulletItem:
 class GroupData:
     min: int
     max: int
-    _id: uuid.UUID = field(init=False, repr=False)
+    order_: int
+    id: uuid.UUID = field(init=False, repr=False)
 
     def __post_init__(self):
         # Set the unique ID after the instance is created
@@ -82,39 +87,37 @@ class ResumeExperienceItem:
                  experience_type: Literal["job", "project"],
                  max_bullets: int,
                  min_bullets: int,
-                 bullet_groups: list[GroupData] = None,
-                 bullets: list[tuple[ResumeBulletItem, int]] = None,
+                 order_: int,
+                 bullets: list[tuple[ResumeBulletItem, GroupData]] = None,
                  metatext1="",
                  metatext2="",
                  metatext3="",
                  metatext4="",
                  metatext5="",
+                 order: int = None
                  ) -> None:
+        self.order_ = order_
         self.id = id
         self.experience_type = experience_type
         self.__bullets = [] if bullets is None else bullets
-        self.__bullet_groups = [] if bullet_groups is None else bullet_groups
         self.embedding = None
         self.metatext1 = metatext1
         self.metatext2 = metatext2
         self.metatext3 = metatext3
         self.metatext4 = metatext4
         self.metatext5 = metatext5
-        self.add_bullets(self.__bullets, self.__bullet_groups)
+        self.add_bullets(self.__bullets)
 
         self.max_bullets = max_bullets
         self.min_bullets = min_bullets
 
+        self.order = order
+
     def __str__(self) -> str:
         return self.metatext1
 
-    @property
-    def groups(self):
-        return self.__bullet_groups
-
-    def add_bullets(self, bullets: list[tuple[ResumeBulletItem, int]], groups: list[GroupData]):
+    def add_bullets(self, bullets: list[tuple[ResumeBulletItem, GroupData]]):
         self.__bullets = bullets
-        self.__bullet_groups = groups
         self.update_embedding()
 
     def update_embedding(self):
@@ -127,28 +130,104 @@ class ResumeExperienceItem:
         # self.embedding = TextEncoder.embed(
         #     ", ".join([bullet[0].text for bullet in self.__bullets]))
 
-    @ property
+    @property
     def bullets(self):
         return self.__bullets
 
     def add_group(self, bullets: list[ResumeBulletItem], group_data: GroupData):
-        index = len(self.__bullet_groups)
-        self.__bullet_groups.append(group_data)
         for bullet in bullets:
-            self.__bullets.append((bullet, index))
-
+            self.__bullets.append((bullet, group_data))
         self.update_embedding()
 
-    # def
+
+class PreProcessedBullet(NamedTuple):
+    experience: ResumeExperienceItem
+    bullet_point: tuple[ResumeBulletItem, GroupData]
+    similarity: float
+
+
+class DataSortingKeys(NamedTuple):
+    "NameTuple for sorting bullets into the correct order."
+    # put all bullets from same experience together
+    experience_id: str
+    # first sort the experiences by they're fixed order if given,
+    experience_order: int
+    # then sort by their similarity
+    experience_similarity: float
+    # the order that the experience shows up in the data file
+    experience_order_: int
+    # then sort the bullets by their fixed order
+    bullet_order: int
+    # then by the bullets similarity if know order is given,
+    bullet_similarity: float
+    # then by group
+    bullet_group_order_: int
+    # then by order in group
+    bullet_intergroup_order_: int
+
+
+class ProcessedData(NamedTuple):
+    experience: ResumeExperienceItem
+    bullet: ResumeBulletItem
+    group: GroupData
+    sorting_data: DataSortingKeys
+
+
+class BreaksConstraintError(Exception):
+    """Selecting a bullet would break a constraint."""
+
+
+def process_data(bullets: list[PreProcessedBullet]) -> list[ProcessedData]:
+    """Finds how well an experience matches a description using the bullets embedding."""
+    #
+    exp_bullet_map: dict[str, tuple[list[ResumeBulletItem],
+                                    list[GroupData], list[float], ResumeExperienceItem]] = {}
+    for experience, (bullet, group), cos_sim in bullets:
+        # initialize
+        if experience.id not in exp_bullet_map:
+            exp_bullet_map[experience.id] = ([], [], [], experience)
+        exp_bullet_map[experience.id][0].append(bullet)
+        exp_bullet_map[experience.id][1].append(group)
+        exp_bullet_map[experience.id][2].append(cos_sim)
+
+    processed_datas: list[ProcessedData] = []
+
+    for exp, (exp_bullets, exp_groups, exp_blt_similarities, experience) in exp_bullet_map.items():
+        # only calculate the average of first 6 because most resume wont have more than 6 points
+        exp_similarity = np.mean(exp_blt_similarities[:5])
+        for bullet, group, blt_sim in zip(exp_bullets, exp_groups, exp_blt_similarities):
+            sorting_keys = DataSortingKeys(
+                # descending
+                experience_order=experience.order,
+                # ascending order so take inverse
+                experience_similarity=1/exp_similarity,
+                # order doesn't matter
+                experience_id=experience.id,
+                # descending order
+                experience_order_=experience.order_,
+                # descending order
+                bullet_order=bullet.order,
+                # ascending order so take inverse
+                bullet_similarity=1/blt_sim,
+                # descending order
+                bullet_group_order_=group.order_,
+                # descending order
+                bullet_intergroup_order_=bullet.order_
+            )
+            data = ProcessedData(exp, bullet, group, sorting_keys)
+            processed_datas.append(data)
+
+    return processed_datas
 
 
 def compile_yaml(data_file: str):
     compiled_experiences: list[ResumeExperienceItem] = []
     experiences = load_yaml(data_file)
 
-    for data in experiences:
+    for exp_i, data in enumerate(experiences):
         resume_experience = ResumeExperienceItem(
             id=data.id,
+            order_=exp_i,
             experience_type=data.type,
             metatext1=data.metatext1,
             metatext2=data.metatext2,
@@ -156,47 +235,40 @@ def compile_yaml(data_file: str):
             metatext4=data.metatext4,
             metatext5=data.metatext5,
             min_bullets=data.min_points,
-            max_bullets=data.max_points
+            max_bullets=data.max_points,
+            order=data.order
         )
 
-        for bullet_group in data.groups:
+        for grp_i, bullet_group in enumerate(data.groups):
             group_data = GroupData(
                 min=bullet_group.min,
-                max=bullet_group.max
+                max=bullet_group.max,
+                order_=grp_i,
             )
             bullets = []
-            for point in bullet_group.points:
-                bullet_item = ResumeBulletItem(point.text)
+            for blt_i, point in enumerate(bullet_group.points):
+                bullet_item = ResumeBulletItem(
+                    point.text, order_=blt_i, order=point.order, bold=point.bold)
                 bullets.append(bullet_item)
-
                 for depenant in point.dependants:
-                    dependant_bullet = bullet_item.add_dependant(depenant)
+                    depenant_item = ResumeBulletItem(
+                        depenant.text, depenant.order, bold=depenant.bold)
+                    dependant_bullet = bullet_item.add_dependant(depenant_item)
+                    dependant_bullet.order += 1
                     bullets.append(dependant_bullet)
-            resume_experience.add_group(bullets, group_data)
-        #     for b in bullets:
-        #         print("     ", b.text)
-        # print("-----")
-        # for b in resume_experience.bullets:
-        #     print("     ", b[0].text)
 
-        # print("\n")
+            resume_experience.add_group(bullets, group_data)
 
         compiled_experiences.append(resume_experience)
     return compiled_experiences
 
 
-class ProcessedBullet(NamedTuple):
-    experience: ResumeExperienceItem
-    bullet_point: tuple[ResumeBulletItem, int]
-    similarity: float
-
-
-def preprocess_bullets(compiled_experiences: list[ResumeExperienceItem], prompt) -> list[ProcessedBullet]:
+def preprocess_bullets(compiled_experiences: list[ResumeExperienceItem], prompt) -> list[PreProcessedBullet]:
     prompt_embedding = TextEncoder.embed(prompt)
     datas = []
     for exp in compiled_experiences:
         for bullet in exp.bullets:
-            datas.append(ProcessedBullet(
+            datas.append(PreProcessedBullet(
                 exp,
                 bullet,
                 TextEncoder.cosine_similarity(
@@ -205,7 +277,7 @@ def preprocess_bullets(compiled_experiences: list[ResumeExperienceItem], prompt)
     return datas
 
 
-def experience_similarity(bullets: list[ProcessedBullet]):
+def experience_similarity(bullets: list[PreProcessedBullet]):
     """Finds how well an experience matches a description using the bullets embedding."""
     exp_map = {}
     for experience, _, cos_sim in bullets:
@@ -220,21 +292,6 @@ def experience_similarity(bullets: list[ProcessedBullet]):
     for k, v in exp_map.items():
         experiences.append((k, np.mean(v)))
     return experiences
-
-
-class ResumeFormat1ExperienceItem(ResumeExperienceItem):
-    # example of reimplementing to hints to where the metatexts are going
-    def __init__(self,
-                 title: str,
-                 experience_type: Literal['job', 'project'],
-                 lsubtext: str,
-                 ruppertext: str,
-                 rlowertext: str,
-                 keywords: list[str],
-                 bullets: set[tuple[ResumeBulletItem, dict]] = [],
-                 ) -> None:
-        ...
-        # super().__init__(...)
 
 
 def select_experiences(experiences: list[ResumeExperienceItem], resume_template: TexResumeTemplate):
@@ -252,65 +309,187 @@ def select_experiences(experiences: list[ResumeExperienceItem], resume_template:
     return sorted_experiences
 
 
-def select_experience_bullets(bullets: list[ProcessedBullet], selected_experiences: list[ResumeExperienceItem], max_lines, line_char_lim):
-    def add_bullet(group: list, bullet: ResumeBulletItem, lines_counter: int):
+def select_data(processed_datas: list[ProcessedData], resume_template: TexResumeTemplate, max_lines, line_char_lim):
+    selected_datas: list[ProcessedData] = []
+    selected_datas_set: set[str] = set()
+    experience_bullet_selection_counter = {
+        d.experience.id: 0 for d in processed_datas}
+    group_bullet_selection_counter = {d.group.id: 0 for d in processed_datas}
+    total_lines_counter = 0
+    total_experience_type_selection_counter = {
+        d[0].placetype: set() for d in resume_template.args}
+
+    # sort only based on similarity
+    similarity_sorted_data = sorted(processed_datas, key=lambda x: (
+        x.sorting_data.experience_id, x.sorting_data.experience_similarity, x.sorting_data.bullet_similarity))
+
+    def check_experience_type_selections(experience: ResumeExperienceItem):
+        "Raises error if the type does not exist in the template or if the max amount of experience for that type has been reached."
+        if experience.experience_type not in total_experience_type_selection_counter:
+            raise BreaksConstraintError(
+                f"{experience.experience_type} not in Latex Template.")
+        elif len(total_experience_type_selection_counter[experience.experience_type]) > resume_template.get_experience_args(experience.experience_type).n:
+            raise BreaksConstraintError(
+                f"Experience limit for type: {experience.experience_type} has been reached."
+            )
+
+    def check_experience_max(experience: ResumeExperienceItem):
+        """Raises error if experience bullet max is met."""
+        if experience.max_bullets is None:
+            return
+        if experience_bullet_selection_counter[experience.experience_type] >= experience.max_bullets:
+            raise BreaksConstraintError(
+                f"{experience.experience_type} experience type max bullets reached.")
+
+    def check_experience_min(experience: ResumeExperienceItem):
+        """Raises error if experience bullet min is not met."""
+        if experience.min_bullets is None:
+            return
+        if experience_bullet_selection_counter[experience.experience_type] < experience.min_bullets:
+            raise BreaksConstraintError(
+                f"{experience.experience_type} experience type min bullets not met.")
+
+    def check_group_max(group: GroupData):
+        """Raises error if group bullet max is met."""
+        if group.max is None:
+            return
+        if group_bullet_selection_counter[group.id] >= group.max:
+            raise BreaksConstraintError(
+                f"{group} max bullets reached.")
+
+    def check_group_min(group: GroupData):
+        """Raises error if group bullet min is not met."""
+        if group.min is None:
+            return
+        if group_bullet_selection_counter[group.id] < group.min:
+            raise BreaksConstraintError(
+                f"{group} min bullets not reached.")
+
+    def check_lines_max():
+        """Raises error if max lines is met."""
+        if total_lines_counter >= max_lines:
+            raise BreaksConstraintError("Max lines is met.")
+
+    def add_data_to_selection(data: ProcessedData):
+        nonlocal total_lines_counter
+        if data.bullet.dependency is not None:
+            add_data_to_selection(ProcessedData(
+                data.experience, data.bullet.dependency, data.group, data.sorting_data))
+        if data.bullet.text not in selected_datas_set:
+            selected_datas.append(data)
+            selected_datas_set.add(data.bullet.text)
+            total_lines_counter += calculate_lines(
+                data.bullet.text, line_char_lim)
+            experience_bullet_selection_counter[data.experience.id] += 1
+            group_bullet_selection_counter[data.group.id] += 1
+            total_experience_type_selection_counter[data.experience.experience_type].add(
+                data.experience.id)
+
+    # loop through data in order and make sure conditions are not broken
+    # first satisfy min requirement for experiences
+    for data in similarity_sorted_data:
+        try:
+            # could but max lines in a seperate try except cause this function can just return of max lines raises an error. but not really worth it for the perforance boost.
+            check_lines_max()
+            check_experience_max(data.experience)
+            check_group_max(data.group)
+            check_experience_type_selections(data.experience)
+        except BreaksConstraintError:
+            continue
+        try:
+            check_experience_min(data.experience)
+        except BreaksConstraintError:
+            add_data_to_selection(data)
+
+    # second satisfy min requirement for group
+    for data in similarity_sorted_data:
+        try:
+            check_lines_max()
+            check_experience_max(data.experience)
+            check_group_max(data.group)
+            check_experience_type_selections(data.experience)
+        except BreaksConstraintError:
+            continue
+        try:
+            check_group_min(data.group)
+        except BreaksConstraintError:
+            add_data_to_selection(data)
+
+    # last keep adding bullets until a constraint is met (probably max lines)
+    for data in similarity_sorted_data:
+        try:
+            check_lines_max()
+            check_experience_max(data.experience)
+            check_group_max(data.group)
+            check_experience_type_selections(data.experience)
+        except BreaksConstraintError:
+            continue
+        add_data_to_selection(data)
+
+    return selected_datas
+
+
+def select_experience_bullets(bullets: list[PreProcessedBullet], selected_experiences: list[ResumeExperienceItem], max_lines, line_char_lim):
+    lines = 0
+
+    def add_bullet(group: list, bullet: ResumeBulletItem):
+        nonlocal lines
         if bullet.dependency is not None:
-            add_bullet(group, bullet.dependency, lines_counter)
+            add_bullet(group, bullet.dependency)
         if bullet not in group:
             group.append(bullet)
-            lines_counter += calculate_lines(bullet.text, line_char_lim)
+            lines += calculate_lines(bullet.text, line_char_lim)
 
-    selected_experiences: dict[ResumeExperienceItem,
-                               dict[GroupData, list[ResumeBulletItem]]] = {}
-    lines = 0
+    selected_experiences_bullets: dict[ResumeExperienceItem,
+                                       dict[GroupData, list[ResumeBulletItem]]] = {}
+    bullets = sorted(bullets, key=lambda x: x.similarity, reverse=True)
     # satisfy min requirement for groups
     for exp, bullet, _ in bullets:
         group = exp.groups[bullet[1]]
         if exp not in selected_experiences:
-            selected_experiences[exp] = {}
-        if group not in selected_experiences[exp]:
-            selected_experiences[exp][group] = []
+            continue
+        if exp not in selected_experiences_bullets:
+            selected_experiences_bullets[exp] = {}
+        if group not in selected_experiences_bullets[exp]:
+            selected_experiences_bullets[exp][group] = []
         if lines > max_lines:
             break
         if group.min is None:
             continue
-        if len(selected_experiences[exp][group]) < group.min:
-            add_bullet(selected_experiences[exp][group], bullet[0], lines)
-
+        if len(selected_experiences_bullets[exp][group]) < group.min:
+            add_bullet(selected_experiences_bullets[exp][group], bullet[0])
     # satisfy min requirement for experiences
     for exp, bullet, _ in bullets:
         group = exp.groups[bullet[1]]
         if exp not in selected_experiences:
-            selected_experiences[exp] = {}
-        if group not in selected_experiences[exp]:
-            selected_experiences[exp][group] = []
+            continue
+        if exp not in selected_experiences_bullets:
+            selected_experiences_bullets[exp] = {}
+        if group not in selected_experiences_bullets[exp]:
+            selected_experiences_bullets[exp][group] = []
         if lines > max_lines:
             break
         if exp.min_bullets is None:
             continue
         if sum(
-                len(group) for _, group in selected_experiences[exp].items()) < exp.min_bullets and len(selected_experiences[exp][group]) < group.max:
-            add_bullet(selected_experiences[exp][group], bullet[0], lines)
+                len(group) for _, group in selected_experiences_bullets[exp].items()) < exp.min_bullets and len(selected_experiences_bullets[exp][group]) < group.max:
+            add_bullet(selected_experiences_bullets[exp][group], bullet[0])
 
     # get additional points above similarity cut off unless lines has been reached
     for exp, bullet, _ in bullets:
         group = exp.groups[bullet[1]]
         if exp not in selected_experiences:
-            selected_experiences[exp] = {}
-        if group not in selected_experiences[exp]:
-            selected_experiences[exp][group] = []
+            continue
+        if exp not in selected_experiences_bullets:
+            selected_experiences_bullets[exp] = {}
+        if group not in selected_experiences_bullets[exp]:
+            selected_experiences_bullets[exp][group] = []
         if exp.max_bullets is not None:
-            if sum(len(group) for _, group in selected_experiences[exp].items()) >= exp.max_bullets:
+            if sum(len(group) for _, group in selected_experiences_bullets[exp].items()) >= exp.max_bullets:
                 continue
-        if len(selected_experiences[exp][group]) >= group.max:
-            if bullet[0].text == "Developed various JavaScript and Python scripts for co-workers to improve the time spent on requirements management in Excel by over 500%.":
-                print("22222")
-                print(selected_experiences[exp][group],
-                      group.max, selected_experiences[exp])
+        if len(selected_experiences_bullets[exp][group]) >= group.max:
             continue
         if lines < max_lines:
-            if bullet[0].text == "Developed various JavaScript and Python scripts for co-workers to improve the time spent on requirements management in Excel by over 500%.":
-                print("111111")
-            add_bullet(selected_experiences[exp][group], bullet[0], lines)
+            add_bullet(selected_experiences_bullets[exp][group], bullet[0])
 
-    return selected_experiences
+    return selected_experiences_bullets
