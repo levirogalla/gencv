@@ -3,6 +3,7 @@ import uuid
 from dataclasses import dataclass, field
 import torch
 import numpy as np
+import logging
 
 from gencv.latex_builder import TexResumeTemplate
 
@@ -10,7 +11,7 @@ from .utils import TextEncoder, load_yaml, calculate_lines
 
 
 class ResumeBulletItem:
-    DEFAULT_ORDER = 99999
+    DEFAULT_ORDER = 0
 
     def __init__(self, text: str, order_: int, order: int = DEFAULT_ORDER, bold: list[str] = None) -> None:
         self.__text = text
@@ -19,7 +20,7 @@ class ResumeBulletItem:
         self.__dependency = None
         self.__parent: ResumeBulletItem = None
         self.order_ = order_
-        self.order = order
+        self.order = self.order = order if order is not None else self.DEFAULT_ORDER
         self.bold = bold
         self.set_text(text)
 
@@ -74,14 +75,12 @@ class GroupData:
     min: int
     max: int
     order_: int
-    id: uuid.UUID = field(init=False, repr=False)
-
-    def __post_init__(self):
-        # Set the unique ID after the instance is created
-        object.__setattr__(self, '_id', uuid.uuid4())
+    id: uuid.UUID = field(init=False, repr=True, default_factory=uuid.uuid4)
 
 
 class ResumeExperienceItem:
+    DEFAULT_ORDER = 0
+
     def __init__(self,
                  id: str,
                  experience_type: Literal["job", "project"],
@@ -94,7 +93,7 @@ class ResumeExperienceItem:
                  metatext3="",
                  metatext4="",
                  metatext5="",
-                 order: int = None
+                 order: int = DEFAULT_ORDER
                  ) -> None:
         self.order_ = order_
         self.id = id
@@ -111,7 +110,7 @@ class ResumeExperienceItem:
         self.max_bullets = max_bullets
         self.min_bullets = min_bullets
 
-        self.order = order
+        self.order = order if order is not None else self.DEFAULT_ORDER
 
     def __str__(self) -> str:
         return self.metatext1
@@ -148,14 +147,14 @@ class PreProcessedBullet(NamedTuple):
 
 class DataSortingKeys(NamedTuple):
     "NameTuple for sorting bullets into the correct order."
-    # put all bullets from same experience together
-    experience_id: str
     # first sort the experiences by they're fixed order if given,
     experience_order: int
     # then sort by their similarity
     experience_similarity: float
     # the order that the experience shows up in the data file
     experience_order_: int
+    # put all bullets from same experience together if they have the same id and similarity
+    experience_id: str
     # then sort the bullets by their fixed order
     bullet_order: int
     # then by the bullets similarity if know order is given,
@@ -192,7 +191,7 @@ def process_data(bullets: list[PreProcessedBullet]) -> list[ProcessedData]:
 
     processed_datas: list[ProcessedData] = []
 
-    for exp, (exp_bullets, exp_groups, exp_blt_similarities, experience) in exp_bullet_map.items():
+    for _, (exp_bullets, exp_groups, exp_blt_similarities, experience) in exp_bullet_map.items():
         # only calculate the average of first 6 because most resume wont have more than 6 points
         exp_similarity = np.mean(exp_blt_similarities[:5])
         for bullet, group, blt_sim in zip(exp_bullets, exp_groups, exp_blt_similarities):
@@ -214,7 +213,7 @@ def process_data(bullets: list[PreProcessedBullet]) -> list[ProcessedData]:
                 # descending order
                 bullet_intergroup_order_=bullet.order_
             )
-            data = ProcessedData(exp, bullet, group, sorting_keys)
+            data = ProcessedData(experience, bullet, group, sorting_keys)
             processed_datas.append(data)
 
     return processed_datas
@@ -309,7 +308,9 @@ def select_experiences(experiences: list[ResumeExperienceItem], resume_template:
     return sorted_experiences
 
 
-def select_data(processed_datas: list[ProcessedData], resume_template: TexResumeTemplate, max_lines, line_char_lim):
+def select_data(processed_datas: list[ProcessedData], resume_template: TexResumeTemplate, max_lines, line_char_lim) -> list[ProcessedData]:
+    logging.debug(
+        f"selecting data {processed_datas}, {resume_template}, {max_lines}, {line_char_lim}")
     selected_datas: list[ProcessedData] = []
     selected_datas_set: set[str] = set()
     experience_bullet_selection_counter = {
@@ -321,14 +322,21 @@ def select_data(processed_datas: list[ProcessedData], resume_template: TexResume
 
     # sort only based on similarity
     similarity_sorted_data = sorted(processed_datas, key=lambda x: (
-        x.sorting_data.experience_id, x.sorting_data.experience_similarity, x.sorting_data.bullet_similarity))
+        x.sorting_data.experience_id, 1/x.sorting_data.experience_similarity, 1/x.sorting_data.bullet_similarity))
+
+    logging.debug("Sorted data:")
+    for d in similarity_sorted_data if logging.getLogger().getEffectiveLevel() <= logging.DEBUG else []:
+        log_processed_data(d)
 
     def check_experience_type_selections(experience: ResumeExperienceItem):
         "Raises error if the type does not exist in the template or if the max amount of experience for that type has been reached."
         if experience.experience_type not in total_experience_type_selection_counter:
             raise BreaksConstraintError(
                 f"{experience.experience_type} not in Latex Template.")
-        elif len(total_experience_type_selection_counter[experience.experience_type]) > resume_template.get_experience_args(experience.experience_type).n:
+        elif experience.id in total_experience_type_selection_counter[experience.experience_type]:
+            # this is fine even if the place type has been reached because we are not adding a new experience
+            return
+        elif len(total_experience_type_selection_counter[experience.experience_type]) >= resume_template.get_experience_args(experience.experience_type).n:
             raise BreaksConstraintError(
                 f"Experience limit for type: {experience.experience_type} has been reached."
             )
@@ -337,17 +345,17 @@ def select_data(processed_datas: list[ProcessedData], resume_template: TexResume
         """Raises error if experience bullet max is met."""
         if experience.max_bullets is None:
             return
-        if experience_bullet_selection_counter[experience.experience_type] >= experience.max_bullets:
+        if experience_bullet_selection_counter[experience.id] >= experience.max_bullets:
             raise BreaksConstraintError(
-                f"{experience.experience_type} experience type max bullets reached.")
+                f"{experience.id} experience type max bullets reached.")
 
     def check_experience_min(experience: ResumeExperienceItem):
         """Raises error if experience bullet min is not met."""
         if experience.min_bullets is None:
             return
-        if experience_bullet_selection_counter[experience.experience_type] < experience.min_bullets:
+        if experience_bullet_selection_counter[experience.id] < experience.min_bullets:
             raise BreaksConstraintError(
-                f"{experience.experience_type} experience type min bullets not met.")
+                f"{experience.id} experience type min bullets not met.")
 
     def check_group_max(group: GroupData):
         """Raises error if group bullet max is met."""
@@ -387,43 +395,65 @@ def select_data(processed_datas: list[ProcessedData], resume_template: TexResume
 
     # loop through data in order and make sure conditions are not broken
     # first satisfy min requirement for experiences
+    logging.debug("\nSatisfying min requirements for experiences: ")
     for data in similarity_sorted_data:
+        log_processed_data(data)
         try:
             # could but max lines in a seperate try except cause this function can just return of max lines raises an error. but not really worth it for the perforance boost.
             check_lines_max()
+            check_experience_type_selections(data.experience)
             check_experience_max(data.experience)
             check_group_max(data.group)
-            check_experience_type_selections(data.experience)
-        except BreaksConstraintError:
+        except BreaksConstraintError as e:
+            logging.debug(
+                f"For the above bullet the following exception occured: {e} \nNOT ADDING BULLET.")
             continue
         try:
             check_experience_min(data.experience)
-        except BreaksConstraintError:
+        except BreaksConstraintError as e:
+            logging.debug(
+                f"For the above bullet the following exception occured: {e} \nADDING BULLET.")
             add_data_to_selection(data)
+            continue
+        logging.debug("No exception occured, NOT ADDING BULLET.")
 
     # second satisfy min requirement for group
+    logging.debug("\nSatisfying min requirements for groups: ")
     for data in similarity_sorted_data:
+        log_processed_data(data)
         try:
             check_lines_max()
+            check_experience_type_selections(data.experience)
             check_experience_max(data.experience)
             check_group_max(data.group)
-            check_experience_type_selections(data.experience)
-        except BreaksConstraintError:
+        except BreaksConstraintError as e:
+            logging.debug(
+                f"For the above bullet the following exception occured: {e} \nNOT ADDING BULLET.")
             continue
         try:
             check_group_min(data.group)
-        except BreaksConstraintError:
+        except BreaksConstraintError as e:
+            logging.debug(
+                f"For the above bullet the following exception occured: {e} \nADDING BULLET.")
             add_data_to_selection(data)
+            continue
+        logging.debug("No exception occured, NOT ADDING BULLET.")
 
     # last keep adding bullets until a constraint is met (probably max lines)
+    logging.debug("\nSatisfying min requirements for experiences: ")
     for data in similarity_sorted_data:
+        log_processed_data(data)
         try:
             check_lines_max()
+            check_experience_type_selections(data.experience)
             check_experience_max(data.experience)
             check_group_max(data.group)
-            check_experience_type_selections(data.experience)
-        except BreaksConstraintError:
+        except BreaksConstraintError as e:
+            logging.debug(
+                f"For the above bullet the following exception occured: {e} \nNOT ADDING BULLET.")
             continue
+        logging.debug(
+            f"ADDING BULLET.")
         add_data_to_selection(data)
 
     return selected_datas
@@ -493,3 +523,13 @@ def select_experience_bullets(bullets: list[PreProcessedBullet], selected_experi
             add_bullet(selected_experiences_bullets[exp][group], bullet[0])
 
     return selected_experiences_bullets
+
+
+def log_processed_data(data: ProcessedData):
+    logging.debug("-------------------------------------")
+    logging.debug(f"Bullet: {data.bullet.text}")
+    logging.debug(f"Group: {data.group}")
+    logging.debug(
+        f"Experience: {data.experience.metatext1}, max={data.experience.max_bullets}, min={data.experience.min_bullets}")
+    logging.debug(f"Sorting data: {data.sorting_data}")
+    logging.debug("-------------------------------------")

@@ -31,8 +31,9 @@ def fill_item_template(template: TemplateYAML, data: "ExperienceData") -> str:
     for bullet in data.bullets:
         text = utf8tolatex(bullet.text)
         for bold_kw in bullet.bold:
+            ltx_bold_kw = utf8tolatex(bold_kw)
             text = text.replace(utf8tolatex(
-                bold_kw), rf"\textbf{{{bold_kw}}}")
+                ltx_bold_kw), rf"\textbf{{{ltx_bold_kw}}}")
         compiled_bullet = template.bullet.replace(
             bullet_text_kw, text)
         compiled_bullets.append(compiled_bullet)

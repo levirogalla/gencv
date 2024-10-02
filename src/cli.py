@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 import click
 from pydantic import BaseModel
+from regex import F
 import typer
-from gencv.resumeitems import select_experience_bullets, select_experiences, DataSortingKeys, ProcessedData
+from gencv.resumeitems import ResumeBulletItem, ResumeExperienceItem, select_data, select_experience_bullets, select_experiences, DataSortingKeys, ProcessedData
 from gencv.latex_builder import TexResumeTemplate, ExperienceData, BulletData
 from gencv.resumeitems import compile_yaml, preprocess_bullets, experience_similarity, process_data
 from gencv.description_summerizer import gen_resume_query, extract_keywords
@@ -89,9 +90,11 @@ def mkres(
 
     # this stuff should be defined on the template
     LINE_CHARS_LIM = 120
-    MAX_LINES = 50
+    MAX_LINES = 31
     if not state.verbose:
-        progressbar = typer.progressbar(length=11)
+        progressbar = typer.progressbar(length=7)
+    else:
+        progressbar = None
 
     # load template into program
     resume_template = TexResumeTemplate(os.path.join(template_dir, template))
@@ -111,80 +114,53 @@ def mkres(
     bullets = preprocess_bullets(data, query)
 
     update_console_progress("Ranking experiences...", progressbar)
-    experiences = process_data(bullets)
-    experiences = sorted(experiences, key=lambda x: x.sorting_data)
-    for ex in experiences:
-        print()
-        print(ex.bullet.text)
-        print(ex.sorting_data)
-        print("\n\n")
-    # experiences = experience_similarity(bullets)
+    processed_data = process_data(bullets)
 
     update_console_progress(
         "Selecting best bullet points for experiences...", progressbar)
-    selected_experience_bullets = select_experience_bullets(
-        bullets=bullets,
-        selected_experiences=experiences,
-        max_lines=MAX_LINES,
-        line_char_lim=LINE_CHARS_LIM,
-    )
+    selected_data = select_data(
+        processed_data, resume_template, MAX_LINES, LINE_CHARS_LIM)
+    # sort selected data based on order and similarity
+    selected_data = sorted(selected_data, key=lambda x: x.sorting_data)
 
-    update_console_progress("Preparing to instert resume data...", progressbar)
-    compiled_resume_items: list[ExperienceData] = []
-    sorted_bullet_dict: dict[str, int] = {}
-    for i, bullet in enumerate(bullets):
-        sorted_bullet_dict[bullet.bullet_point[0].text] = (
-            bullet.bullet_point[0].order, i)
+    exp_id_data_map: dict[str, tuple[ResumeExperienceItem,
+                                     list[ResumeBulletItem]]] = {}
+    for d in selected_data:
+        if d.experience.id not in exp_id_data_map:
+            exp_id_data_map[d.experience.id] = (d.experience, [])
+        exp_id_data_map[d.experience.id][1].append(d.bullet)
 
-    for item, group in selected_experience_bullets.items():
-        bullet_datas: list[BulletData] = []
-        for _, bullets in group.items():
-            for bullet in bullets:
-                bullet_datas.append(BulletData(
-                    text=bullet.text, bold=bullet.bold))
-        # filler group data since it isnt need for the latex builder
-        bullet_datas = sorted(
-            bullet_datas, key=lambda x: sorted_bullet_dict[x.text])
-
-        resume_item = ExperienceData(
-            id=item.id,
-            experience_type=item.experience_type,
-            metatext1=item.metatext1,
-            metatext2=item.metatext2,
-            metatext3=item.metatext3,
-            metatext4=item.metatext4,
-            metatext5=item.metatext5,
-            bullets=bullet_datas
+    template_data: list[ExperienceData] = []
+    for _, (experience, bullets) in exp_id_data_map.items():
+        template_bullets = []
+        for b in bullets:
+            template_bullets.append(BulletData(b.text, b.bold))
+        template_experience = ExperienceData(
+            id=experience.id,
+            experience_type=experience.experience_type,
+            bullets=template_bullets,
+            metatext1=experience.metatext1,
+            metatext2=experience.metatext2,
+            metatext3=experience.metatext3,
+            metatext4=experience.metatext4,
+            metatext5=experience.metatext5
         )
+        template_data.append(template_experience)
 
-        compiled_resume_items.append(resume_item)
-
-    update_console_progress(
-        "Organzing resume experiences and bullets...", progressbar)
-    sorted_experiences_order: dict[str, int] = {}
-    for i, (exp) in enumerate(experiences):
-        sorted_experiences_order[exp.id] = (exp.order, i)
-
-    compiled_resume_items = sorted(
-        compiled_resume_items, key=lambda x: sorted_experiences_order[x.id])
+    # need to make this data interface into the resume template
 
     update_console_progress("Filling resume template...", progressbar)
-    resume = resume_template.fill(compiled_resume_items)
+    resume = resume_template.fill(template_data)
 
     update_console_progress("Generating PDF...", progressbar)
     TexResumeTemplate.to_file(
         outdir, template, resume, output_name=outname, proxy_dir=config.proxy_dir, output=output)
 
 
-# @app.command()
-# def main(name: str, age: int = None, teen: bool = True):
-#     """A simple command-line script."""
-#     print(f"Hello, {name}!")
-#     if age:
-#         print(f"You are {age} years old.")
-#     print(teen)
-
-
 if __name__ == "__main__":
-    mkres("levi_resume", "software development for systems engineering.")
+    # for debugging
+    # import logging
+    # logging.basicConfig(level=logging.DEBUG,
+    #                     filename="logging.txt", filemode="w")
+    # mkres("levi_resume", "just a job for mechanical engineering and electrical")
     app()

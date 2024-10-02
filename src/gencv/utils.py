@@ -50,7 +50,7 @@ class TextEncoder:
 class ExperienceYAML(BaseModel):
     class GroupYAML(BaseModel):
         class PointYAML(BaseModel):
-            order: Optional[int] = 99999
+            order: Optional[int] = None
             text: str
             bold: Optional[list[str]] = []
             dependants: Optional[list["ExperienceYAML.GroupYAML.PointYAML"]] = [
@@ -75,7 +75,7 @@ class ExperienceYAML(BaseModel):
     min_points: Optional[int] = None
     max_points: Optional[int] = None
     groups: list[GroupYAML] = None
-    order: Optional[int] = 99999
+    order: Optional[int] = None
 
 
 class TemplateYAML(BaseModel):
