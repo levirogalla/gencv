@@ -1,16 +1,18 @@
+"Module contain functions and classes for working with resume items."
+
+import logging
 from typing import Literal, NamedTuple
 import uuid
 from dataclasses import dataclass, field
 import torch
 import numpy as np
-import logging
 
 from gencv.latex_builder import TexResumeTemplate
-
-from .utils import TextEncoder, load_yaml, calculate_lines
+from gencv.utils import TextEncoder, load_yaml, calculate_lines
 
 
 class ResumeBulletItem:
+    """Class for holding and managing resume bullet item."""
     DEFAULT_ORDER = 0
 
     def __init__(self, text: str, order_: int, order: int = DEFAULT_ORDER, bold: list[str] = None) -> None:
@@ -30,22 +32,27 @@ class ResumeBulletItem:
     def __repr__(self) -> str:
         return self.__text
 
-    def set_text(self, text: str) -> "ResumeItem":
+    def set_text(self, text: str) -> "ResumeBulletItem":
+        "Set the bullet text."
         self.__text = text
         self.__embedding = TextEncoder.embed(text)
         return self
 
     def set_parent(self, parent_bullet_item: "ResumeBulletItem"):
+        "Set the bullet parent."
         self.__parent = parent_bullet_item
 
     def get_parent(self):
+        "Get the bullet parent."
         return self.__parent
 
     @property
     def dependants(self):
+        "Get bullets that depend on this bullet."
         return self.__dependants
 
     def set_dependency(self, dependency: "ResumeBulletItem"):
+        "Set the parent/depedency for this bullet."
         self.__dependency = dependency
         if self not in dependency.dependants:
             raise LookupError(
@@ -53,13 +60,16 @@ class ResumeBulletItem:
 
     @property
     def text(self):
+        "Get text."
         return self.__text
 
     @property
     def embedding(self):
+        "Get embbeding."
         return self.__embedding
 
     def add_dependant(self, dependant):
+        """Add dependant."""
         dependant.set_parent(self)
         self.__dependants.append(dependant)
         dependant.set_dependency(self)
@@ -67,11 +77,13 @@ class ResumeBulletItem:
 
     @property
     def dependency(self):
+        "Get parent/dependency."
         return self.__dependency
 
 
 @dataclass(frozen=True)
 class GroupData:
+    "Dataclass for holding group data."
     min: int
     max: int
     order_: int
@@ -79,6 +91,7 @@ class GroupData:
 
 
 class ResumeExperienceItem:
+    "Class for storing resume experience data."
     DEFAULT_ORDER = 0
 
     def __init__(self,
@@ -116,13 +129,15 @@ class ResumeExperienceItem:
         return self.metatext1
 
     def add_bullets(self, bullets: list[tuple[ResumeBulletItem, GroupData]]):
+        "Add bullet to experience."
         self.__bullets = bullets
         self.update_embedding()
 
     def update_embedding(self):
+        "Update the experience embedding."
         if len(self.__bullets) == 0:
             return
-
+        # this should only calculate for the first 5
         mean = torch.stack(
             [bullet[0].embedding for bullet in self.__bullets], dim=0).mean(dim=0)
         self.embedding = mean
@@ -131,15 +146,18 @@ class ResumeExperienceItem:
 
     @property
     def bullets(self):
+        "Get bullets."
         return self.__bullets
 
     def add_group(self, bullets: list[ResumeBulletItem], group_data: GroupData):
+        "Add a bullet group with bullets."
         for bullet in bullets:
             self.__bullets.append((bullet, group_data))
         self.update_embedding()
 
 
 class PreProcessedBullet(NamedTuple):
+    """Named tuple for pre process bullet."""
     experience: ResumeExperienceItem
     bullet_point: tuple[ResumeBulletItem, GroupData]
     similarity: float
@@ -166,6 +184,7 @@ class DataSortingKeys(NamedTuple):
 
 
 class ProcessedData(NamedTuple):
+    """NamedTuple of processed data in an easy format for working with."""
     experience: ResumeExperienceItem
     bullet: ResumeBulletItem
     group: GroupData
@@ -220,6 +239,7 @@ def process_data(bullets: list[PreProcessedBullet]) -> list[ProcessedData]:
 
 
 def compile_yaml(data_file: str):
+    """Load yaml file and convert types into custom types."""
     compiled_experiences: list[ResumeExperienceItem] = []
     experiences = load_yaml(data_file)
 
@@ -263,6 +283,7 @@ def compile_yaml(data_file: str):
 
 
 def preprocess_bullets(compiled_experiences: list[ResumeExperienceItem], prompt) -> list[PreProcessedBullet]:
+    "Calculate embeddings for bullets."
     prompt_embedding = TextEncoder.embed(prompt)
     datas = []
     for exp in compiled_experiences:
@@ -276,39 +297,8 @@ def preprocess_bullets(compiled_experiences: list[ResumeExperienceItem], prompt)
     return datas
 
 
-def experience_similarity(bullets: list[PreProcessedBullet]):
-    """Finds how well an experience matches a description using the bullets embedding."""
-    exp_map = {}
-    for experience, _, cos_sim in bullets:
-        if experience in exp_map:
-            # only check most similar 6 bullets since in most cases the resume wont have more than 6 bullets
-            if len(exp_map[experience]) < 5:
-                exp_map[experience].append(cos_sim)
-        else:
-            exp_map[experience] = [cos_sim]
-
-    experiences: list[tuple[ResumeExperienceItem, float]] = []
-    for k, v in exp_map.items():
-        experiences.append((k, np.mean(v)))
-    return experiences
-
-
-def select_experiences(experiences: list[ResumeExperienceItem], resume_template: TexResumeTemplate):
-    sorted_experiences_counter: dict[str, list[ResumeExperienceItem]] = {}
-    sorted_experiences: list[ResumeExperienceItem] = []
-    for exp_arg, _ in resume_template.args:
-        sorted_experiences_counter[exp_arg.placetype] = 0
-
-    for exp_arg, _ in resume_template.args:
-        for exp in experiences:
-            if exp.experience_type == exp_arg.placetype and sorted_experiences_counter[exp_arg.placetype] < exp_arg.n:
-                sorted_experiences_counter[exp_arg.placetype] += 1
-                sorted_experiences.append(exp)
-
-    return sorted_experiences
-
-
 def select_data(processed_datas: list[ProcessedData], resume_template: TexResumeTemplate, max_lines, line_char_lim) -> list[ProcessedData]:
+    """Selects which bullets to add based on similarity to query, constraints in data file, and constraints in latex template."""
     logging.debug(
         f"selecting data {processed_datas}, {resume_template}, {max_lines}, {line_char_lim}")
     selected_datas: list[ProcessedData] = []
@@ -319,26 +309,30 @@ def select_data(processed_datas: list[ProcessedData], resume_template: TexResume
     total_lines_counter = 0
     total_experience_type_selection_counter = {
         d[0].placetype: set() for d in resume_template.args}
+    selected_experience_ids = set()
 
-    # sort only based on similarity
-    similarity_sorted_data = sorted(processed_datas, key=lambda x: (
-        x.sorting_data.experience_id, 1/x.sorting_data.experience_similarity, 1/x.sorting_data.bullet_similarity))
+    # select most similar experience according to amount of experience per type outlined in templates
+    for d in sorted(processed_datas, key=lambda x: (x.sorting_data.experience_similarity, x.sorting_data.experience_id)):
+        if d.experience.experience_type not in total_experience_type_selection_counter:
+            continue
+        elif len(total_experience_type_selection_counter[d.experience.experience_type]) < resume_template.get_experience_args(d.experience.experience_type).n:
+            total_experience_type_selection_counter[d.experience.experience_type].add(
+                d.experience.id)
+            selected_experience_ids.add(d.experience.id)
+
+    # sort by only bullet similarity so best bullets are taken
+    similarity_sorted_data = sorted(
+        processed_datas, key=lambda x: x.sorting_data.bullet_similarity)
 
     logging.debug("Sorted data:")
     for d in similarity_sorted_data if logging.getLogger().getEffectiveLevel() <= logging.DEBUG else []:
         log_processed_data(d)
 
-    def check_experience_type_selections(experience: ResumeExperienceItem):
+    def check_experience_selected(experience: ResumeExperienceItem):
         "Raises error if the type does not exist in the template or if the max amount of experience for that type has been reached."
-        if experience.experience_type not in total_experience_type_selection_counter:
+        if experience.id not in selected_experience_ids:
             raise BreaksConstraintError(
-                f"{experience.experience_type} not in Latex Template.")
-        elif experience.id in total_experience_type_selection_counter[experience.experience_type]:
-            # this is fine even if the place type has been reached because we are not adding a new experience
-            return
-        elif len(total_experience_type_selection_counter[experience.experience_type]) >= resume_template.get_experience_args(experience.experience_type).n:
-            raise BreaksConstraintError(
-                f"Experience limit for type: {experience.experience_type} has been reached."
+                f"Experience: {experience.id} has not been selected."
             )
 
     def check_experience_max(experience: ResumeExperienceItem):
@@ -401,7 +395,7 @@ def select_data(processed_datas: list[ProcessedData], resume_template: TexResume
         try:
             # could but max lines in a seperate try except cause this function can just return of max lines raises an error. but not really worth it for the perforance boost.
             check_lines_max()
-            check_experience_type_selections(data.experience)
+            check_experience_selected(data.experience)
             check_experience_max(data.experience)
             check_group_max(data.group)
         except BreaksConstraintError as e:
@@ -423,7 +417,7 @@ def select_data(processed_datas: list[ProcessedData], resume_template: TexResume
         log_processed_data(data)
         try:
             check_lines_max()
-            check_experience_type_selections(data.experience)
+            check_experience_selected(data.experience)
             check_experience_max(data.experience)
             check_group_max(data.group)
         except BreaksConstraintError as e:
@@ -445,7 +439,7 @@ def select_data(processed_datas: list[ProcessedData], resume_template: TexResume
         log_processed_data(data)
         try:
             check_lines_max()
-            check_experience_type_selections(data.experience)
+            check_experience_selected(data.experience)
             check_experience_max(data.experience)
             check_group_max(data.group)
         except BreaksConstraintError as e:
@@ -459,77 +453,10 @@ def select_data(processed_datas: list[ProcessedData], resume_template: TexResume
     return selected_datas
 
 
-def select_experience_bullets(bullets: list[PreProcessedBullet], selected_experiences: list[ResumeExperienceItem], max_lines, line_char_lim):
-    lines = 0
-
-    def add_bullet(group: list, bullet: ResumeBulletItem):
-        nonlocal lines
-        if bullet.dependency is not None:
-            add_bullet(group, bullet.dependency)
-        if bullet not in group:
-            group.append(bullet)
-            lines += calculate_lines(bullet.text, line_char_lim)
-
-    selected_experiences_bullets: dict[ResumeExperienceItem,
-                                       dict[GroupData, list[ResumeBulletItem]]] = {}
-    bullets = sorted(bullets, key=lambda x: x.similarity, reverse=True)
-    # satisfy min requirement for groups
-    for exp, bullet, _ in bullets:
-        group = exp.groups[bullet[1]]
-        if exp not in selected_experiences:
-            continue
-        if exp not in selected_experiences_bullets:
-            selected_experiences_bullets[exp] = {}
-        if group not in selected_experiences_bullets[exp]:
-            selected_experiences_bullets[exp][group] = []
-        if lines > max_lines:
-            break
-        if group.min is None:
-            continue
-        if len(selected_experiences_bullets[exp][group]) < group.min:
-            add_bullet(selected_experiences_bullets[exp][group], bullet[0])
-    # satisfy min requirement for experiences
-    for exp, bullet, _ in bullets:
-        group = exp.groups[bullet[1]]
-        if exp not in selected_experiences:
-            continue
-        if exp not in selected_experiences_bullets:
-            selected_experiences_bullets[exp] = {}
-        if group not in selected_experiences_bullets[exp]:
-            selected_experiences_bullets[exp][group] = []
-        if lines > max_lines:
-            break
-        if exp.min_bullets is None:
-            continue
-        if sum(
-                len(group) for _, group in selected_experiences_bullets[exp].items()) < exp.min_bullets and len(selected_experiences_bullets[exp][group]) < group.max:
-            add_bullet(selected_experiences_bullets[exp][group], bullet[0])
-
-    # get additional points above similarity cut off unless lines has been reached
-    for exp, bullet, _ in bullets:
-        group = exp.groups[bullet[1]]
-        if exp not in selected_experiences:
-            continue
-        if exp not in selected_experiences_bullets:
-            selected_experiences_bullets[exp] = {}
-        if group not in selected_experiences_bullets[exp]:
-            selected_experiences_bullets[exp][group] = []
-        if exp.max_bullets is not None:
-            if sum(len(group) for _, group in selected_experiences_bullets[exp].items()) >= exp.max_bullets:
-                continue
-        if len(selected_experiences_bullets[exp][group]) >= group.max:
-            continue
-        if lines < max_lines:
-            add_bullet(selected_experiences_bullets[exp][group], bullet[0])
-
-    return selected_experiences_bullets
-
-
 def log_processed_data(data: ProcessedData):
-    logging.debug("-------------------------------------")
+    """Logs a processed data to the consol."""
     logging.debug(f"Bullet: {data.bullet.text}")
     logging.debug(f"Group: {data.group}")
     logging.debug(
         f"Experience: {data.experience.metatext1}, max={data.experience.max_bullets}, min={data.experience.min_bullets}")
     logging.debug(f"Sorting data: {data.sorting_data}")
-    logging.debug("-------------------------------------")

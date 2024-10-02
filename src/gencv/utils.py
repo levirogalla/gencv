@@ -95,4 +95,5 @@ def load_yaml(path: str):
 
 
 def calculate_lines(text: str, line_chars_lim: int):
+    """Calculate how many lines a string is taking up on the resume."""
     return math.ceil(len(text) / line_chars_lim)

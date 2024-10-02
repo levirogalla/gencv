@@ -1,14 +1,15 @@
-from dataclasses import dataclass
-import click
-from pydantic import BaseModel
-from regex import F
-import typer
-from gencv.resumeitems import ResumeBulletItem, ResumeExperienceItem, select_data, select_experience_bullets, select_experiences, DataSortingKeys, ProcessedData
-from gencv.latex_builder import TexResumeTemplate, ExperienceData, BulletData
-from gencv.resumeitems import compile_yaml, preprocess_bullets, experience_similarity, process_data
-from gencv.description_summerizer import gen_resume_query, extract_keywords
-from typing import Literal, NamedTuple, Optional
+"""CLI for generating custom resumes tailored to job description."""
+
 import os
+from typing import Literal, Optional
+from dataclasses import dataclass
+from pydantic import BaseModel
+import typer
+from gencv.resumeitems import (
+    ResumeBulletItem, ResumeExperienceItem,
+    select_data, compile_yaml, preprocess_bullets, process_data)
+from gencv.latex_builder import TexResumeTemplate, ExperienceData, BulletData
+from gencv.description_summerizer import gen_resume_query
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -17,6 +18,7 @@ app = typer.Typer()
 
 
 class Config(BaseModel):
+    """Holds the config options for the program."""
     datafile: Optional[str] = os.path.expanduser("~/.gencv/data.yaml")
     template_dir: Optional[str] = os.path.expanduser("~/.gencv/templates")
     output_dir: Optional[str] = os.path.expanduser("~/Downloads")
@@ -25,7 +27,7 @@ class Config(BaseModel):
     proxy_dir: Optional[str] = os.path.expanduser("~/.gencv/proxy")
 
 
-with open(os.path.expanduser("~/.gencvrc"), 'r') as file:
+with open(os.path.expanduser("~/.gencvrc"), 'r', encoding='utf-8') as file:
     config_dict = {}
     for line in file:
         # Remove whitespace and newline characters
@@ -43,6 +45,7 @@ with open(os.path.expanduser("~/.gencvrc"), 'r') as file:
 
 @dataclass(frozen=False)
 class State:
+    """Holds program state."""
     verbose: bool = config.verbose
 
 
@@ -70,6 +73,7 @@ def select_projects():
 
 
 def update_console_progress(message: str, progressbar):
+    """Outputs the message to the consol if in verbose mode otherwise just updates progress bar."""
     if state.verbose:
         typer.echo(message)
     else:
@@ -120,6 +124,7 @@ def mkres(
         "Selecting best bullet points for experiences...", progressbar)
     selected_data = select_data(
         processed_data, resume_template, MAX_LINES, LINE_CHARS_LIM)
+
     # sort selected data based on order and similarity
     selected_data = sorted(selected_data, key=lambda x: x.sorting_data)
 
@@ -158,9 +163,4 @@ def mkres(
 
 
 if __name__ == "__main__":
-    # for debugging
-    # import logging
-    # logging.basicConfig(level=logging.DEBUG,
-    #                     filename="logging.txt", filemode="w")
-    # mkres("levi_resume", "just a job for mechanical engineering and electrical")
     app()

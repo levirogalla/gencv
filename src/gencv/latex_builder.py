@@ -14,11 +14,13 @@ import datetime
 
 
 class ExperiencePlaceHolder(BaseModel):
+    """Holds config data for the placeholder in the resume for the experience type."""
     placetype: str
     n: int
 
 
 def fill_item_template(template: TemplateYAML, data: "ExperienceData") -> str:
+    """Fills the item templat specified in the YAML file."""
     bullet_text_kw = r"%text%"
     bullets_kw = r"%bullets%"
     metatext1kw = r"%metatext1%"
@@ -50,11 +52,13 @@ def fill_item_template(template: TemplateYAML, data: "ExperienceData") -> str:
 
 
 class TexResumeTemplate:
+    """Class for loading and filling latex templates."""
+
     def __init__(self, template_folder_path: str) -> None:
-        with open(os.path.join(template_folder_path, "+resume.tex"), "r") as f:
+        with open(os.path.join(template_folder_path, "+resume.tex"), "r", encoding="utf-8") as f:
             self.file_template = f.read()
 
-        with open(os.path.join(template_folder_path, "+resume.yaml"), "r") as f:
+        with open(os.path.join(template_folder_path, "+resume.yaml"), "r", encoding="utf-8") as f:
             self.item_templates: dict[str, dict] = yaml.safe_load(f)
 
         self.command_stack = self.create_command_stack()
@@ -63,6 +67,7 @@ class TexResumeTemplate:
         self.compile()
 
     def create_command_stack(self):
+        """Parses latex file to create command stack."""
         chars = ""
         stack = []
         for char in self.file_template:
@@ -81,6 +86,7 @@ class TexResumeTemplate:
         return stack
 
     def compile(self):
+        """Compiles latex template file, extracts placeholder arguments."""
         commands = enumerate(self.command_stack)
         self.command_stack: list
         args = []
@@ -104,6 +110,7 @@ class TexResumeTemplate:
         self.args = args
 
     def fill(self, experiences: list["ExperienceData"]):
+        """Fills the template with resume data. Returns new command stack."""
         displacement = 0
         filled_latex_stack = self.command_stack.copy()
         for exp_type, template in self.item_templates.items():
@@ -197,6 +204,7 @@ class TexResumeTemplate:
                 shutil.rmtree(proxy_dir)
 
     def get_experience_args(self, experience_type: str) -> ExperiencePlaceHolder:
+        """Get arguments for an experience."""
         for exp, _ in self.args:
             if exp.placetype == experience_type:
                 return exp
@@ -205,12 +213,14 @@ class TexResumeTemplate:
 
 @dataclass(frozen=True)
 class BulletData:
+    """Required bullet data for latex template."""
     text: str
     bold: list[str] = None
 
 
 @dataclass(frozen=True)
 class ExperienceData:
+    """Required experience data for latex template."""
     id: str
     experience_type: str
     bullets: list[BulletData]
