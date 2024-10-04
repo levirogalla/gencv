@@ -1,6 +1,8 @@
 """CLI for generating custom resumes tailored to job description."""
 
 import os
+import textwrap
+import shutil
 from typing import Literal, Optional
 from dataclasses import dataclass
 from pydantic import BaseModel
@@ -160,6 +162,19 @@ def mkres(
     update_console_progress("Generating PDF...", progressbar)
     TexResumeTemplate.to_file(
         outdir, template, resume, output_name=outname, proxy_dir=config.proxy_dir, output=output)
+
+
+@app.command(name="compile")
+def test_compile_yaml(datafile: str = config.datafile):
+    """Test datafile format by compiling it."""
+    compile_yaml(datafile)
+    typer.echo("Data compiles without errors.")
+
+
+@app.command()
+def list_info():
+    """List experiences."""
+    ...
 
 
 if __name__ == "__main__":

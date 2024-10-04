@@ -38,6 +38,40 @@ def extract_keywords(description: str):
     return keywords
 
 
+def bullet_point_review(bullet: str):
+    # this doesnt really work that consitently
+    prompt = """
+    Your job is to critique resume bullet points based on a list of criteria.
+    The things you are judging are:
+        1. Does it follow the x, y, z format, that is 'Accomplished [x] as measured by [y] by doing [z]'.
+        2. Does it display confidence.
+        3. Is it consice but also descriptive enough.
+        4. Does it qualify the achievements well if possible.
+        5. Does it use good action words.
+    When you are giving feed back, DO NOT just re-write the entire bullet point, be specific about what is wrong and how that specific part can be re-worded to fix the issue.
+    Your response should follow the format outline in quotes below, where [n], and [text] are variables you are filling out:
+    '
+    [n/10] x, y, z: [text].
+    [n/10] confidence: [text].
+    [n/10] consice: [text].
+    [n/10] qualifications: [text].
+    [n/10] action words: [text].
+    Overall feedback: [text].
+    '
+    Try to keep you feedback short and very too the point.
+    The job bullet point you are evaluating is written below: \n\n
+    """
+    stream = ollama.chat(
+        model='llama3.1:8b',
+        messages=[{'role': 'user', 'content': prompt + bullet}],
+        stream=True,
+    )
+    for chunk in stream:
+        print(chunk['message']['content'], end='', flush=True)
+
+
+# bullet_point_review(
+#     "Led R&D to optimize requirements analysis in systems engineering project requirements using Sentence Transformers, NLP, LLMs, and K-Means clustering, saving 2+ weeks of manual labour for the requirements management team.")
 # print(gen_resume_query("""
 # Required Knowledge, Skills and Abilities
 # Basic knowledge of AUTOCAD or comparable program
