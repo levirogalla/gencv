@@ -1,0 +1,9 @@
+torch
+numpy
+pyyaml
+pylatexenc
+transformers
+sentence_transformers
+pydantic
+typer
+ollama

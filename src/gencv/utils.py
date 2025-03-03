@@ -81,6 +81,7 @@ class ExperienceYAML(BaseModel):
 class TemplateYAML(BaseModel):
     template: str
     bullet: str
+    join: Optional[Literal[", ", "\n"]] = "\n"
 
 
 def load_yaml(path: str):

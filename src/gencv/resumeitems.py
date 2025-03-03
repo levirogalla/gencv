@@ -212,7 +212,7 @@ def process_data(bullets: list[PreProcessedBullet]) -> list[ProcessedData]:
 
     for _, (exp_bullets, exp_groups, exp_blt_similarities, experience) in exp_bullet_map.items():
         # only calculate the average of first 6 because most resume wont have more than 6 points
-        exp_similarity = np.mean(exp_blt_similarities[:5])
+        exp_similarity = np.mean(sorted(exp_blt_similarities)[:3])
         for bullet, group, blt_sim in zip(exp_bullets, exp_groups, exp_blt_similarities):
             sorting_keys = DataSortingKeys(
                 # descending
@@ -297,7 +297,7 @@ def preprocess_bullets(compiled_experiences: list[ResumeExperienceItem], prompt)
     return datas
 
 
-def select_data(processed_datas: list[ProcessedData], resume_template: TexResumeTemplate, max_lines, line_char_lim) -> list[ProcessedData]:
+def select_data(processed_datas: list[ProcessedData], resume_template: TexResumeTemplate, max_lines, line_char_lim, line_offset_exceptions: set[str]) -> list[ProcessedData]:
     """Selects which bullets to add based on similarity to query, constraints in data file, and constraints in latex template."""
     logging.debug(
         f"selecting data {processed_datas}, {resume_template}, {max_lines}, {line_char_lim}")
@@ -380,8 +380,9 @@ def select_data(processed_datas: list[ProcessedData], resume_template: TexResume
         if data.bullet.text not in selected_datas_set:
             selected_datas.append(data)
             selected_datas_set.add(data.bullet.text)
-            total_lines_counter += calculate_lines(
-                data.bullet.text, line_char_lim)
+            if data.experience.id not in line_offset_exceptions:
+                total_lines_counter += calculate_lines(
+                    data.bullet.text, line_char_lim)
             experience_bullet_selection_counter[data.experience.id] += 1
             group_bullet_selection_counter[data.group.id] += 1
             total_experience_type_selection_counter[data.experience.experience_type].add(
