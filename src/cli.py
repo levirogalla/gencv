@@ -1,5 +1,6 @@
 """CLI for generating custom resumes tailored to job description."""
 
+from contextlib import nullcontext
 import os
 import textwrap
 import shutil
@@ -11,12 +12,13 @@ from gencv.resumeitems import (
     ResumeBulletItem, ResumeExperienceItem,
     select_data, compile_yaml, preprocess_bullets, process_data)
 from gencv.latex_builder import TexResumeTemplate, ExperienceData, BulletData
-from gencv.description_summerizer import gen_resume_query
+from gencv.description_summerizer import extract_keywords, gen_resume_query
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-app = typer.Typer()
+
+app = typer.Typer(rich_markup_mode=None)
 
 
 class Config(BaseModel):
@@ -74,12 +76,13 @@ def select_projects():
     ...
 
 
-def update_console_progress(message: str, progressbar):
+def update_console_progress(message: str, progressbar=None):
     """Outputs the message to the consol if in verbose mode otherwise just updates progress bar."""
     if state.verbose:
         typer.echo(message)
     else:
-        progressbar.update(1)
+        if progressbar is not None:
+            progressbar.update(1)
 
 
 @app.command()
@@ -96,72 +99,100 @@ def mkres(
 
     # this stuff should be defined on the template
     LINE_CHARS_LIM = 120
-    MAX_LINES = 31
+    MAX_LINES = 32
     if not state.verbose:
-        progressbar = typer.progressbar(length=7)
+        pbar = typer.progressbar(length=7)
+        # progressbar = None
     else:
-        progressbar = None
+        pbar = nullcontext()
+    with pbar as progressbar:
+        # load template into program
+        resume_template = TexResumeTemplate(
+            os.path.join(template_dir, template))
 
-    # load template into program
-    resume_template = TexResumeTemplate(os.path.join(template_dir, template))
+        update_console_progress("Compiling resume data...", progressbar)
+        # load yaml file into program as python objects
+        data = compile_yaml(datafile)
 
-    update_console_progress("Compiling resume data...", progressbar)
-    # load yaml file into program as python objects
-    data = compile_yaml(datafile)
+        update_console_progress(
+            "Generating resume data query from description...", progressbar)
+        # generate resume query
+        descquery = gen_resume_query(desc) if not as_query else desc
+        kwquery = ", ".join(extract_keywords(desc)) if not as_query else desc
+        if state.verbose:
+            typer.echo(f"Generated description query: '{descquery}'")
+            typer.echo(f"Generated keyword query: '{kwquery}'")
 
-    update_console_progress(
-        "Generating resume data query from description...", progressbar)
-    # generate resume query
-    query = gen_resume_query(desc) if not as_query else desc
-    if state.verbose:
-        typer.echo(f"Generated query: '{query}'")
+        update_console_progress("Querying resume bullet points..", progressbar)
 
-    update_console_progress("Querying resume bullet points..", progressbar)
-    bullets = preprocess_bullets(data, query)
+        kwquery_data = []
+        descquery_data = []
+        kw_exp_ids = set()
+        for arg, _ in resume_template.args:
+            for exp in data:
+                if exp.experience_type == arg.placetype:
+                    if arg.query == "kw":
+                        kwquery_data.append(exp)
+                        kw_exp_ids.add(exp.id)
+                    elif arg.query == "desc":
+                        descquery_data.append(exp)
+                    else:
+                        raise ValueError("Query type not recognised.")
+        bullets = preprocess_bullets(
+            descquery_data, descquery) + preprocess_bullets(kwquery_data, kwquery)
 
-    update_console_progress("Ranking experiences...", progressbar)
-    processed_data = process_data(bullets)
+        update_console_progress("\n".join(
+            f"{b.similarity} | {b.bullet_point[0].text}" for b in sorted(bullets, key=lambda x: x.similarity)))
 
-    update_console_progress(
-        "Selecting best bullet points for experiences...", progressbar)
-    selected_data = select_data(
-        processed_data, resume_template, MAX_LINES, LINE_CHARS_LIM)
+        update_console_progress("Ranking experiences...", progressbar)
+        processed_data = process_data(bullets)
 
-    # sort selected data based on order and similarity
-    selected_data = sorted(selected_data, key=lambda x: x.sorting_data)
+        # for d in sorted(processed_data, key=lambda x: x.sorting_data):
+        #     print(d.sorting_data, d.bullet.text)
+        # print("\n\n\n")
+        update_console_progress(
+            "Selecting best bullet points for experiences...", progressbar)
+        selected_data = select_data(
+            processed_data, resume_template, MAX_LINES, LINE_CHARS_LIM, kw_exp_ids)
 
-    exp_id_data_map: dict[str, tuple[ResumeExperienceItem,
-                                     list[ResumeBulletItem]]] = {}
-    for d in selected_data:
-        if d.experience.id not in exp_id_data_map:
-            exp_id_data_map[d.experience.id] = (d.experience, [])
-        exp_id_data_map[d.experience.id][1].append(d.bullet)
+        # sort selected data based on order and similarity
+        selected_data = sorted(selected_data, key=lambda x: x.sorting_data)
 
-    template_data: list[ExperienceData] = []
-    for _, (experience, bullets) in exp_id_data_map.items():
-        template_bullets = []
-        for b in bullets:
-            template_bullets.append(BulletData(b.text, b.bold))
-        template_experience = ExperienceData(
-            id=experience.id,
-            experience_type=experience.experience_type,
-            bullets=template_bullets,
-            metatext1=experience.metatext1,
-            metatext2=experience.metatext2,
-            metatext3=experience.metatext3,
-            metatext4=experience.metatext4,
-            metatext5=experience.metatext5
-        )
-        template_data.append(template_experience)
+        # for d in selected_data:
+        #     print(d.sorting_data, d.bullet.text)
 
-    # need to make this data interface into the resume template
+        exp_id_data_map: dict[str, tuple[ResumeExperienceItem,
+                                         list[ResumeBulletItem]]] = {}
+        for d in selected_data:
+            if d.experience.id not in exp_id_data_map:
+                exp_id_data_map[d.experience.id] = (d.experience, [])
+            exp_id_data_map[d.experience.id][1].append(d.bullet)
 
-    update_console_progress("Filling resume template...", progressbar)
-    resume = resume_template.fill(template_data)
+        template_data: list[ExperienceData] = []
+        for _, (experience, bullets) in exp_id_data_map.items():
+            template_bullets = []
+            for b in bullets:
+                template_bullets.append(BulletData(b.text, b.bold))
+            template_experience = ExperienceData(
+                id=experience.id,
+                experience_type=experience.experience_type,
+                bullets=template_bullets,
+                metatext1=experience.metatext1,
+                metatext2=experience.metatext2,
+                metatext3=experience.metatext3,
+                metatext4=experience.metatext4,
+                metatext5=experience.metatext5
+            )
+            template_data.append(template_experience)
 
-    update_console_progress("Generating PDF...", progressbar)
-    TexResumeTemplate.to_file(
-        outdir, template, resume, output_name=outname, proxy_dir=config.proxy_dir, output=output)
+        # need to make this data interface into the resume template
+
+        update_console_progress("Filling resume template...", progressbar)
+        resume = resume_template.fill(template_data)
+
+        update_console_progress("Generating PDF...", progressbar)
+        TexResumeTemplate.to_file(
+            outdir, template, resume, output_name=outname, proxy_dir=config.proxy_dir, output=output)
 
 
 @app.command(name="compile")

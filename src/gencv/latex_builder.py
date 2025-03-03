@@ -16,6 +16,7 @@ import datetime
 class ExperiencePlaceHolder(BaseModel):
     """Holds config data for the placeholder in the resume for the experience type."""
     placetype: str
+    query: Literal["kw", "desc"]
     n: int
 
 
@@ -45,7 +46,7 @@ def fill_item_template(template: TemplateYAML, data: "ExperienceData") -> str:
         .replace(metatext3kw, utf8tolatex(data.metatext3)) \
         .replace(metatext4kw, utf8tolatex(data.metatext4)) \
         .replace(metatext5kw, utf8tolatex(data.metatext5)) \
-        .replace(bullets_kw, "\n".join(compiled_bullets))
+        .replace(bullets_kw, template.join.join(compiled_bullets))
 
     return compiled_template
 

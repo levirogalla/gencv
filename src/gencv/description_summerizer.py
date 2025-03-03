@@ -4,9 +4,9 @@ import ollama
 def gen_resume_query(description: str):
     """Create a textual query from description."""
     prompt = """
-    Your job is to summerize the qualification listed in a job description into a text search query.
-    An example of a query that you would respond with is: 'Embedded systems engineering, 
-    mechanical engineering, knowledge of gradient desent, and comfortable with vs code'.
+    Your job is to summerize the qualification listed in a job description into a text search query for resume bullet points. Your response should ONLY contain the following text:
+    'Bullets portraying [your respone]' where [your response] is what you fill in.
+    For example: your response could be something like what follows in the qoutes "Bullets portraying knoledge of computer systems, experience with machine learning." 
     Respond with ONLY the query, make sure to include ALL technical and soft requirements, do NOT make up any information you do not have. 
     The job description you are summerizing is written below: \n\n
     """
